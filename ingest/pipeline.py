@@ -108,20 +108,29 @@ def carregar_indice(conn: psycopg.Connection) -> IndiceEspecies:
 # --------------------------------------------------------------------------
 
 
-async def ingerir_sets(conn: psycopg.Connection, cfg: Config) -> Resultado:
-    """Sets em inglês com série e data, mais o overlay de nome em português.
+async def ingerir_sets(
+    conn: psycopg.Connection, cfg: Config, *, region: str = "west"
+) -> Resultado:
+    """Sets de uma região.
+
+    No oeste o inglês é a espinha e o português é overlay. No Japão não há
+    overlay: o catálogo é outro, com ids próprios, e o único idioma é o
+    japonês. Por isso a chave de card_set é (tcgdex_id, region) — 'neo1'
+    existe nos dois e são coleções diferentes.
 
     pt_release vira 'yes' quando o set aparece em /pt/sets. A ausência NÃO
     vira 'no': o documento é explícito que ausência na API não prova
     inexistência, e a medição de cobertura confirma — base1 aparece em
     /pt/sets com zero cartas em PT, e o Brasil recebeu a Coleção Básica.
     """
-    res = Resultado("sets")
+    res = Resultado(f"sets[{region}]")
+    lang = cfg.lang_ja if region == "jp" else cfg.lang_en
+
     async with TCGdex(cfg.tcgdex_base, concurrency=cfg.concurrency, timeout=cfg.timeout) as api:
-        series = await api.series(cfg.lang_en)
+        series = await api.series(lang)
         serie_de_set: dict[str, tuple[str, str, dt.date | None]] = {}
         detalhes = await asyncio.gather(
-            *(api.serie_detail(cfg.lang_en, s["id"]) for s in series)
+            *(api.serie_detail(lang, s["id"]) for s in series)
         )
         for s, det in zip(series, detalhes, strict=True):
             if not det:
@@ -130,26 +139,26 @@ async def ingerir_sets(conn: psycopg.Connection, cfg: Config) -> Resultado:
             for st in det.get("sets", []):
                 serie_de_set[st["id"]] = (s["id"], s.get("name") or s["id"], lancamento)
 
-        resumos_en = await api.sets(cfg.lang_en)
-        resumos_pt = await api.sets(cfg.lang_pt)
-        nome_pt = {s["id"]: s.get("name") for s in resumos_pt}
-
+        resumos = await api.sets(lang)
         completos = await asyncio.gather(
-            *(api.set_detail(cfg.lang_en, s["id"]) for s in resumos_en)
+            *(api.set_detail(lang, s["id"]) for s in resumos)
         )
 
-        # Cobertura PT por set em uma requisição, em vez de uma por set.
-        cartas_pt = await api.all_cards(cfg.lang_pt)
-
-    set_ids = sorted({s["id"] for s in resumos_en}, key=len, reverse=True)
-    pt_por_set: dict[str, int] = defaultdict(int)
-    for c in cartas_pt:
-        sid = _set_de_carta(c["id"], set_ids)
-        if sid:
-            pt_por_set[sid] += 1
+        nome_pt: dict[str, str | None] = {}
+        pt_por_set: dict[str, int] = defaultdict(int)
+        if region == "west":
+            resumos_pt = await api.sets(cfg.lang_pt)
+            nome_pt = {s["id"]: s.get("name") for s in resumos_pt}
+            # Cobertura PT por set em uma requisição, em vez de uma por set.
+            cartas_pt = await api.all_cards(cfg.lang_pt)
+            set_ids = sorted({s["id"] for s in resumos}, key=len, reverse=True)
+            for c in cartas_pt:
+                sid = _set_de_carta(c["id"], set_ids)
+                if sid:
+                    pt_por_set[sid] += 1
 
     with conn.cursor() as cur:
-        for resumo, det in zip(resumos_en, completos, strict=True):
+        for resumo, det in zip(resumos, completos, strict=True):
             sid = resumo["id"]
             d = det or resumo
             serie, serie_nome, serie_data = serie_de_set.get(sid, (None, None, None))
@@ -158,15 +167,15 @@ async def ingerir_sets(conn: psycopg.Connection, cfg: Config) -> Resultado:
             cur.execute(
                 """
                 insert into card_set (
-                  tcgdex_id, serie, serie_name, serie_released, name_en, name_pt,
-                  release_date, count_official, count_total, symbol_url, logo_url,
-                  is_digital, pt_release, pt_card_count
+                  tcgdex_id, region, serie, serie_name, serie_released, name_en,
+                  name_pt, release_date, count_official, count_total, symbol_url,
+                  logo_url, is_digital, pt_release, pt_card_count
                 ) values (
-                  %(id)s, %(serie)s, %(serie_name)s, %(serie_released)s, %(name_en)s,
-                  %(name_pt)s, %(release_date)s, %(official)s, %(total)s, %(symbol)s,
-                  %(logo)s, %(digital)s, %(pt_release)s, %(pt_count)s
+                  %(id)s, %(region)s, %(serie)s, %(serie_name)s, %(serie_released)s,
+                  %(name_en)s, %(name_pt)s, %(release_date)s, %(official)s, %(total)s,
+                  %(symbol)s, %(logo)s, %(digital)s, %(pt_release)s, %(pt_count)s
                 )
-                on conflict (tcgdex_id) do update set
+                on conflict (tcgdex_id, region) do update set
                   serie = excluded.serie,
                   serie_name = excluded.serie_name,
                   serie_released = excluded.serie_released,
@@ -188,9 +197,12 @@ async def ingerir_sets(conn: psycopg.Connection, cfg: Config) -> Resultado:
                 """,
                 {
                     "id": sid,
+                    "region": region,
                     "serie": serie,
                     "serie_name": serie_nome,
                     "serie_released": serie_data,
+                    # No catálogo japonês este campo guarda o nome japonês:
+                    # é o único nome que a coleção tem.
                     "name_en": d.get("name") or sid,
                     "name_pt": nome_pt.get(sid),
                     "release_date": _data(d.get("releaseDate")),
@@ -210,16 +222,20 @@ async def ingerir_sets(conn: psycopg.Connection, cfg: Config) -> Resultado:
                 res.atualizados += 1
     conn.commit()
 
-    com_nome_sem_carta = sorted(s for s in nome_pt if pt_por_set.get(s, 0) == 0)
-    res.observacoes.append(
-        f"{len(nome_pt)} sets listados em /{cfg.lang_pt}/sets, "
-        f"{len(com_nome_sem_carta)} deles sem nenhuma carta em PT"
-    )
-    if com_nome_sem_carta:
+    if region == "west":
+        com_nome_sem_carta = sorted(s for s in nome_pt if pt_por_set.get(s, 0) == 0)
         res.observacoes.append(
-            "fila de curadoria no nível de set: " + ", ".join(com_nome_sem_carta[:12])
-            + ("..." if len(com_nome_sem_carta) > 12 else "")
+            f"{len(nome_pt)} sets listados em /{cfg.lang_pt}/sets, "
+            f"{len(com_nome_sem_carta)} deles sem nenhuma carta em PT"
         )
+        if com_nome_sem_carta:
+            res.observacoes.append(
+                "fila de curadoria no nível de set: "
+                + ", ".join(com_nome_sem_carta[:12])
+                + ("..." if len(com_nome_sem_carta) > 12 else "")
+            )
+    else:
+        res.observacoes.append(f"{len(resumos)} coleções no catálogo japonês")
     return res
 
 
@@ -239,63 +255,80 @@ def _data(valor: str | None) -> dt.date | None:
 # --------------------------------------------------------------------------
 
 
-async def ingerir_cartas(conn: psycopg.Connection, cfg: Config) -> Resultado:
-    """Todas as cartas dos dois idiomas em duas requisições.
+async def ingerir_cartas(
+    conn: psycopg.Connection, cfg: Config, *, region: str = "west"
+) -> Resultado:
+    """Todas as cartas de uma região em uma ou duas requisições.
 
     O endpoint em lote /{lang}/cards devolve id, localId, name e image. Falta
     variants, rarity e dexId, que vêm no passo 'details'.
     """
-    res = Resultado("cards")
+    res = Resultado(f"cards[{region}]")
     async with TCGdex(cfg.tcgdex_base, concurrency=cfg.concurrency, timeout=cfg.timeout) as api:
-        en, pt = await asyncio.gather(
-            api.all_cards(cfg.lang_en), api.all_cards(cfg.lang_pt)
-        )
+        if region == "jp":
+            principal = await api.all_cards(cfg.lang_ja)
+            traduzidas: dict[str, dict] = {}
+        else:
+            principal, pt = await asyncio.gather(
+                api.all_cards(cfg.lang_en), api.all_cards(cfg.lang_pt)
+            )
+            traduzidas = {c["id"]: c for c in pt}
 
     with conn.cursor() as cur:
-        cur.execute("select id, tcgdex_id from card_set")
+        cur.execute("select id, tcgdex_id from card_set where region = %s", (region,))
         set_db = {r["tcgdex_id"]: r["id"] for r in cur.fetchall()}
     set_ids = sorted(set_db, key=len, reverse=True)
 
-    pt_por_id = {c["id"]: c for c in pt}
-
     with conn.cursor() as cur:
-        for c in en:
+        for c in principal:
             sid = _set_de_carta(c["id"], set_ids)
             if sid is None:
                 res.ignorados += 1
                 continue
-            p = pt_por_id.get(c["id"])
+            p = traduzidas.get(c["id"])
             numero = str(c.get("localId") or "")
+            japonesa = region == "jp"
             cur.execute(
                 """
                 insert into card (
-                  tcgdex_id, set_id, number, number_sort, name_en, name_pt,
-                  image_url, image_url_pt, has_pt
+                  tcgdex_id, region, set_id, number, number_sort, name_en, name_pt,
+                  name_ja, image_url, image_url_pt, image_url_ja, has_pt, has_ja
                 ) values (
-                  %(id)s, %(set_id)s, %(number)s, %(number_sort)s, %(name_en)s,
-                  %(name_pt)s, %(image)s, %(image_pt)s, %(has_pt)s
+                  %(id)s, %(region)s, %(set_id)s, %(number)s, %(number_sort)s,
+                  %(name_en)s, %(name_pt)s, %(name_ja)s, %(image)s, %(image_pt)s,
+                  %(image_ja)s, %(has_pt)s, %(has_ja)s
                 )
-                on conflict (tcgdex_id) do update set
+                on conflict (tcgdex_id, region) do update set
                   set_id = excluded.set_id,
                   number = excluded.number,
                   number_sort = excluded.number_sort,
-                  name_en = excluded.name_en,
+                  name_en = coalesce(excluded.name_en, card.name_en),
                   name_pt = coalesce(excluded.name_pt, card.name_pt),
+                  name_ja = coalesce(excluded.name_ja, card.name_ja),
                   image_url = coalesce(excluded.image_url, card.image_url),
                   image_url_pt = coalesce(excluded.image_url_pt, card.image_url_pt),
-                  has_pt = excluded.has_pt or card.has_pt
+                  image_url_ja = coalesce(excluded.image_url_ja, card.image_url_ja),
+                  has_pt = excluded.has_pt or card.has_pt,
+                  has_ja = excluded.has_ja or card.has_ja
                 returning (xmax = 0) as novo
                 """,
                 {
                     "id": c["id"],
+                    "region": region,
                     "set_id": set_db[sid],
                     "number": numero,
                     "number_sort": _num_sort(numero),
-                    "name_en": c.get("name") or "?",
+                    # Carta japonesa não tem nome em inglês no TCGdex: /en/cards
+                    # devolve 404 para SM7b-016 e S6K-028.
+                    "name_en": None if japonesa else (c.get("name") or "?"),
                     "name_pt": (p or {}).get("name"),
-                    "image": image_url(c.get("image")),
+                    "name_ja": c.get("name") if japonesa else None,
+                    "image": None if japonesa else image_url(c.get("image")),
                     "image_pt": image_url((p or {}).get("image")),
+                    "image_ja": image_url(c.get("image")) if japonesa else None,
                     "has_pt": p is not None,
+                    # A carta está no catálogo japonês; é essa a evidência.
+                    "has_ja": japonesa,
                 },
             )
             row = cur.fetchone()
@@ -305,10 +338,18 @@ async def ingerir_cartas(conn: psycopg.Connection, cfg: Config) -> Resultado:
                 res.atualizados += 1
     conn.commit()
 
-    res.observacoes.append(
-        f"{len(en)} cartas em {cfg.lang_en}, {len(pt)} em {cfg.lang_pt} "
-        f"({100 * len(pt) / max(len(en), 1):.0f}% de cobertura)"
-    )
+    if region == "jp":
+        com_scan = sum(1 for c in principal if c.get("image"))
+        res.observacoes.append(
+            f"{len(principal)} cartas em {cfg.lang_ja}, {com_scan} com scan "
+            f"({100 * com_scan / max(len(principal), 1):.0f}%)"
+        )
+    else:
+        res.observacoes.append(
+            f"{len(principal)} cartas em {cfg.lang_en}, {len(traduzidas)} em "
+            f"{cfg.lang_pt} ({100 * len(traduzidas) / max(len(principal), 1):.0f}% "
+            f"de cobertura)"
+        )
     return res
 
 
@@ -324,20 +365,33 @@ async def ingerir_detalhes(
     species_slug: str | None = None,
     set_id: str | None = None,
     todas: bool = False,
+    region: str | None = None,
     refazer: bool = False,
     limite: int | None = None,
 ) -> Resultado:
     """GET /cards/{id} por carta: variants, variants_detailed, rarity,
-    category e dexId. É o passo caro, então sempre escopado."""
+    category e dexId. É o passo caro, então sempre escopado.
+
+    Os alvos carregam a região junto do id porque os dois catálogos repetem
+    ids: 'neo1-1' existe no oeste e no Japão, em coleções diferentes.
+    """
     res = Resultado("details")
-    alvos = await _alvos(conn, cfg, species_slug=species_slug, set_id=set_id, todas=todas)
-    if not refazer:
+    alvos = await _alvos(
+        conn, cfg, species_slug=species_slug, set_id=set_id, todas=todas, region=region
+    )
+    if not refazer and alvos:
         with conn.cursor() as cur:
             cur.execute(
-                "select tcgdex_id from card where details_at is not null and tcgdex_id = any(%s)",
-                (alvos,),
+                """
+                select tcgdex_id, region from card
+                where details_at is not null
+                  and (tcgdex_id, region) in (
+                    select * from unnest(%s::text[], %s::text[])
+                  )
+                """,
+                ([a[0] for a in alvos], [a[1] for a in alvos]),
             )
-            prontas = {r["tcgdex_id"] for r in cur.fetchall()}
+            prontas = {(r["tcgdex_id"], r["region"]) for r in cur.fetchall()}
         res.ignorados = len(prontas)
         alvos = [a for a in alvos if a not in prontas]
     if limite:
@@ -346,18 +400,29 @@ async def ingerir_detalhes(
         res.observacoes.append("nada a buscar")
         return res
 
+    def lang_principal(reg: str) -> str:
+        return cfg.lang_ja if reg == "jp" else cfg.lang_en
+
     async with TCGdex(cfg.tcgdex_base, concurrency=cfg.concurrency, timeout=cfg.timeout) as api:
-        en = await asyncio.gather(*(api.card(cfg.lang_en, cid) for cid in alvos))
-        com_pt = [cid for cid, d in zip(alvos, en, strict=True) if d]
-        pt = await asyncio.gather(*(api.card(cfg.lang_pt, cid) for cid in com_pt))
-    pt_por_id = {cid: d for cid, d in zip(com_pt, pt, strict=True) if d}
+        principais = await asyncio.gather(
+            *(api.card(lang_principal(reg), cid) for cid, reg in alvos)
+        )
+        # O overlay em português só existe no catálogo do oeste.
+        pede_pt = [
+            cid
+            for (cid, reg), d in zip(alvos, principais, strict=True)
+            if d and reg == "west"
+        ]
+        pt = await asyncio.gather(*(api.card(cfg.lang_pt, cid) for cid in pede_pt))
+    pt_por_id = {cid: d for cid, d in zip(pede_pt, pt, strict=True) if d}
 
     with conn.cursor() as cur:
-        for cid, d in zip(alvos, en, strict=True):
+        for (cid, reg), d in zip(alvos, principais, strict=True):
             if not d:
                 res.ignorados += 1
                 continue
             p = pt_por_id.get(cid)
+            japonesa = reg == "jp"
             cur.execute(
                 """
                 update card set
@@ -368,13 +433,18 @@ async def ingerir_detalhes(
                   api_variants = %(variants)s,
                   api_variants_detailed = %(variants_detailed)s,
                   api_dex_id = %(dex_id)s,
+                  name_ja = coalesce(%(name_ja)s, card.name_ja),
                   has_pt = %(has_pt)s or card.has_pt,
+                  has_ja = %(has_ja)s or card.has_ja,
                   image_url_pt = coalesce(%(image_pt)s, card.image_url_pt),
+                  image_url_ja = coalesce(%(image_ja)s, card.image_url_ja),
                   details_at = now()
-                where tcgdex_id = %(id)s
+                where tcgdex_id = %(id)s and region = %(region)s
                 """,
                 {
                     "id": cid,
+                    "region": reg,
+                    # A raridade vem em inglês mesmo no catálogo japonês.
                     "rarity_en": d.get("rarity"),
                     "rarity_pt": (p or {}).get("rarity"),
                     "category": d.get("category"),
@@ -384,8 +454,11 @@ async def ingerir_detalhes(
                         d.get("variants_detailed") or []
                     ),
                     "dex_id": d.get("dexId") or None,
+                    "name_ja": d.get("name") if japonesa else None,
                     "has_pt": p is not None,
+                    "has_ja": japonesa,
                     "image_pt": image_url((p or {}).get("image")),
+                    "image_ja": image_url(d.get("image")) if japonesa else None,
                 },
             )
             res.atualizados += cur.rowcount
@@ -400,7 +473,11 @@ async def _alvos(
     species_slug: str | None,
     set_id: str | None,
     todas: bool,
-) -> list[str]:
+    region: str | None = None,
+) -> list[tuple[str, str]]:
+    """Pares (tcgdex_id, region) a buscar."""
+    regioes = [region] if region else ["west", "jp"]
+
     if species_slug:
         with conn.cursor() as cur:
             cur.execute("select dex_number from species where slug = %s", (species_slug,))
@@ -410,27 +487,36 @@ async def _alvos(
                 f"espécie '{species_slug}' não está na tabela species. "
                 f"Rode 'python -m ingest species' primeiro."
             )
+        alvos: list[tuple[str, str]] = []
         async with TCGdex(
             cfg.tcgdex_base, concurrency=cfg.concurrency, timeout=cfg.timeout
         ) as api:
-            cartas = await api.cards_by_dex(cfg.lang_en, row["dex_number"])
-        return [c["id"] for c in cartas]
+            for reg in regioes:
+                lang = cfg.lang_ja if reg == "jp" else cfg.lang_en
+                cartas = await api.cards_by_dex(lang, row["dex_number"])
+                alvos.extend((c["id"], reg) for c in cartas)
+        return alvos
 
     with conn.cursor() as cur:
         if set_id:
             cur.execute(
                 """
-                select c.tcgdex_id from card c
+                select c.tcgdex_id, c.region from card c
                 join card_set s on s.id = c.set_id
-                where s.tcgdex_id = %s order by c.number_sort nulls last, c.number
+                where s.tcgdex_id = %s and c.region = any(%s)
+                order by c.number_sort nulls last, c.number
                 """,
-                (set_id,),
+                (set_id, regioes),
             )
         elif todas:
-            cur.execute("select tcgdex_id from card order by tcgdex_id")
+            cur.execute(
+                "select tcgdex_id, region from card where region = any(%s) "
+                "order by region, tcgdex_id",
+                (regioes,),
+            )
         else:
             raise SystemExit("escolha --species, --set ou --all")
-        return [r["tcgdex_id"] for r in cur.fetchall()]
+        return [(r["tcgdex_id"], r["region"]) for r in cur.fetchall()]
 
 
 # --------------------------------------------------------------------------
@@ -528,7 +614,7 @@ def carregar_politicas(conn: psycopg.Connection) -> list[Politica]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            select id, serie, kind::text, language::text, rarity_regex,
+            select id, serie, region, kind::text, language::text, rarity_regex,
                    min_set_release, max_set_release, allowed, annotate, reason, priority
             from variant_policy
             """
@@ -543,8 +629,9 @@ def gerar(
     species_slug: str | None = None,
     set_id: str | None = None,
     todas: bool = False,
-    idiomas: tuple[str, ...] = ("en", "pt"),
-    auto_confirmar_pt: bool = True,
+    region: str | None = None,
+    idiomas: tuple[str, ...] = ("en", "pt", "ja"),
+    auto_confirmar: bool = True,
 ) -> Resultado:
     """Gera os slots. ON CONFLICT DO NOTHING: curadoria nunca é sobrescrita."""
     res = Resultado("slots")
@@ -562,11 +649,17 @@ def gerar(
             params.append(set_id)
         elif not todas:
             raise SystemExit("escolha --species, --set ou --all")
+        # A região é um recorte adicional, não um escopo por si: 'neo1' existe
+        # nos dois catálogos e sem isso os dois entrariam no mesmo --set.
+        if region:
+            filtro += " and c.region = %s"
+            params.append(region)
 
         cur.execute(
             f"""
             select c.id, c.tcgdex_id, c.rarity_en, c.api_variants,
-                   c.api_variants_detailed, c.has_pt, c.image_url_pt,
+                   c.api_variants_detailed, c.has_pt, c.has_ja,
+                   c.image_url_pt, c.image_url_ja, c.region,
                    st.serie, st.release_date, st.pt_release
             from card c join card_set st on st.id = c.set_id
             where {filtro}
@@ -585,7 +678,10 @@ def gerar(
                 api_variants=r["api_variants"],
                 api_variants_detailed=r["api_variants_detailed"],
                 has_pt=r["has_pt"],
+                has_ja=r["has_ja"],
                 image_url_pt=r["image_url_pt"],
+                image_url_ja=r["image_url_ja"],
+                region=r["region"],
                 serie=r["serie"],
                 set_release=r["release_date"],
                 set_pt_release=r["pt_release"],
@@ -594,7 +690,7 @@ def gerar(
                 carta,
                 politicas,
                 idiomas=idiomas,
-                auto_confirmar_pt=auto_confirmar_pt,
+                auto_confirmar=auto_confirmar,
                 base_api=cfg.tcgdex_base,
                 lang_pt=cfg.lang_pt,
             )
@@ -634,13 +730,15 @@ def gerar(
                         """
                         insert into curation_event
                           (variant_id, from_state, to_state, source_url, actor, notes)
-                        values (%s, null, %s, %s, 'generator:tcgdex-pt', %s)
+                        values (%s, null, %s, %s, %s, %s)
                         """,
                         (
                             novo["id"],
                             s.exists_state,
                             s.source_url,
-                            "promovido em lote: o TCGdex tem esta carta em português",
+                            f"generator:tcgdex-{s.language}",
+                            "promovido em lote: o TCGdex tem esta carta em "
+                            + ("português" if s.language == "pt" else "japonês"),
                         ),
                     )
             vetos.extend(carta.vetos)

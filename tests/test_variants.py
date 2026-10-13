@@ -10,6 +10,7 @@ import datetime as dt
 import pytest
 
 from ingest.variants import (
+    IDIOMAS_POR_REGIAO,
     Carta,
     Politica,
     decidir,
@@ -34,6 +35,14 @@ POLITICAS = [
         allowed=False,
         reason="Ultra Rara, Full Art e Rainbow não têm reverse holo.",
         priority=90,
+    ),
+    Politica(
+        id=4,
+        region="jp",
+        kind="reverse_holo",
+        allowed=False,
+        reason="O card game japonês não imprime reverse holo.",
+        priority=110,
     ),
     Politica(
         id=3,
@@ -215,7 +224,7 @@ class TestGerarSlots:
             carta_sableye_swsh7, serie="swsh", set_release=dt.date(2021, 8, 27),
             set_pt_release="yes", has_pt=True,
         )
-        slots = gerar_slots(carta, POLITICAS, auto_confirmar_pt=False)
+        slots = gerar_slots(carta, POLITICAS, auto_confirmar=False)
         assert all(s.exists_state == "unknown" for s in slots)
         assert all(s.source_url is None for s in slots)
 
@@ -245,3 +254,81 @@ class TestGerarSlots:
         slots = gerar_slots(carta, POLITICAS)
         chaves = [(s.kind, s.language) for s in slots]
         assert len(chaves) == len(set(chaves))
+
+
+class TestJapones:
+    """O catálogo japonês é outro produto, não tradução. Uma carta japonesa é
+    outra carta, em outra coleção, e o único idioma dela é o japonês."""
+
+    def carta_jp(self, **extra) -> Carta:
+        base = {
+            "tcgdex_id": "S6K-028",
+            "rarity_en": "Common",
+            "api_variants": {"normal": True, "holo": False, "reverse": False,
+                             "firstEdition": False, "wPromo": False},
+            "region": "jp",
+            "serie": "S",
+            "set_release": dt.date(2021, 4, 23),
+        }
+        return Carta(**(base | extra))
+
+    def test_regiao_define_os_idiomas_possiveis(self):
+        assert IDIOMAS_POR_REGIAO["jp"] == ("ja",)
+        assert IDIOMAS_POR_REGIAO["west"] == ("en", "pt")
+
+    def test_coleccao_japonesa_nao_gera_slot_em_portugues(self):
+        slots = gerar_slots(self.carta_jp(), POLITICAS, idiomas=("en", "pt", "ja"))
+        assert {s.language for s in slots} == {"ja"}
+
+    def test_pedir_so_portugues_numa_carta_japonesa_nao_gera_nada(self):
+        assert gerar_slots(self.carta_jp(), POLITICAS, idiomas=("pt",)) == []
+
+    def test_coleccao_do_oeste_nao_gera_slot_em_japones(self, carta_sableye_swsh7):
+        carta = carta_de_fixture(
+            carta_sableye_swsh7, serie="swsh", set_release=dt.date(2021, 8, 27),
+            set_pt_release="yes", region="west",
+        )
+        slots = gerar_slots(carta, POLITICAS, idiomas=("en", "pt", "ja"))
+        assert "ja" not in {s.language for s in slots}
+
+    def test_japones_nao_tem_reverse_holo(self):
+        """Medido: 0 de 54 cartas amostradas em S6K, SM7b e PMCG1 têm reverse.
+        A política veta mesmo quando a API diz o contrário."""
+        carta = self.carta_jp(
+            api_variants={"normal": True, "holo": False, "reverse": True,
+                          "firstEdition": False, "wPromo": False}
+        )
+        slots = gerar_slots(carta, POLITICAS)
+        assert not any(s.kind == "reverse_holo" for s in slots)
+        assert any("japonês" in v for v in carta.vetos)
+
+    def test_regra_do_oeste_nao_vaza_para_o_japao(self):
+        """A série 'e' japonesa e a era 'ex' do oeste são coisas diferentes.
+        Uma regra sem região continua valendo nos dois, e é por isso que a
+        regra da era EX pede serie='ex' explicitamente."""
+        d = decidir(
+            POLITICAS, serie="ex", kind="reverse_holo", language="ja",
+            rarity_en="Rare", set_release=dt.date(2003, 9, 18), region="jp",
+        )
+        assert not d.allowed
+        assert "japonês" in d.reason
+
+    def test_carta_japonesa_nasce_confirmada_com_o_scan(self):
+        """Estar no catálogo japonês já é a evidência: a carta é japonesa."""
+        carta = self.carta_jp(
+            has_ja=True,
+            image_url_ja="https://assets.tcgdex.net/ja/s/S6K/028/high.png",
+        )
+        slots = gerar_slots(carta, POLITICAS)
+        assert [(s.kind, s.language, s.exists_state) for s in slots] == [
+            ("regular", "ja", "confirmed")
+        ]
+        assert slots[0].source_url.endswith("/ja/s/S6K/028/high.png")
+
+    def test_sem_scan_a_prova_e_a_propria_carta_na_api(self):
+        """70% do catálogo japonês não tem scan. O registro da carta ainda
+        prova que ela existe, então a URL da API serve de fonte."""
+        carta = self.carta_jp(has_ja=True, image_url_ja=None)
+        slot = gerar_slots(carta, POLITICAS)[0]
+        assert slot.exists_state == "confirmed"
+        assert slot.source_url == "https://api.tcgdex.net/v2/ja/cards/S6K-028"

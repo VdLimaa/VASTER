@@ -4,9 +4,9 @@ Medido em 2026-10-13 contra a API ao vivo, durante a implementação da F0.
 Cada número aqui saiu de uma requisição, não de leitura de documentação.
 Reproduzir: `python -m ingest coverage` depois de `sets` e `cards`.
 
-Este documento existe porque cinco das premissas de
+Este documento existe porque seis das premissas de
 [arquitetura.md](arquitetura.md) não sobreviveram ao contato com a API. Nenhuma
-delas invalida o projeto; duas melhoram bastante.
+delas invalida o projeto; duas melhoram bastante, e a sexta muda o modelo.
 
 ## 1. `pt-br` não é o português do card game
 
@@ -197,3 +197,98 @@ daquela carta. As 21 URLs foram verificadas uma a uma e todas respondem 200.
 Isso é a evidência de nível 3 da hierarquia do documento ("scan em base
 pública"), aplicada em lote. Sobram 73 slots para decisão humana, e os 12
 `reverse_holo` em português são os que realmente precisam de carta na mão.
+
+## 8. Japonês não é tradução: é outro catálogo
+
+O documento de arquitetura trata idioma como atributo do slot, e o enum `lang`
+já aceitava `'ja'`. Para o português isso está certo — é a mesma coleção
+traduzida, com o mesmo `tcgdex_id`. Para o japonês não vale.
+
+| | Oeste (`en`/`pt`) | Japão (`ja`) |
+| --- | ---: | ---: |
+| Coleções | 220 | 184 |
+| Cartas | 23.736 | 12.781 |
+| Ids de coleção | `swsh7`, `sv04.5`, `base1` | `PMCG1`, `VS1`, `web1`, `S6K` |
+| Cartas com scan | ~100% | 3.882 (30%) |
+
+Três medições que fecham a questão:
+
+1. **Id de carta inglesa dá 404 em `ja`.** `swsh7-67`, `sm11-126` e `base1-4`
+   não existem no catálogo japonês. Não há o que casar.
+2. **Quatro ids colidem, e são coleções diferentes.** `neo1` é *Neo Genesis*
+   (111 cartas, 2000-12-16) em inglês e 金、銀、新世界へ... (96 cartas,
+   2000-02-04) em japonês. Com o `unique (tcgdex_id)` original, ingerir o
+   japonês sobrescreveria a coleção inglesa. A chave passou a ser
+   `(tcgdex_id, region)` em `card_set` e em `card`.
+3. **Carta japonesa não tem nome em inglês.** `/en/cards/SM7b-016` e
+   `/en/cards/S6K-028` devolvem 404. Por isso `card.name_en` deixou de ser
+   obrigatório e existe `card.name_ja`.
+
+A consequência de modelo: **uma carta japonesa não é o slot `ja` de uma carta
+inglesa, é outra carta, em outra coleção.** O enum `lang` continua valendo —
+idioma é atributo do slot — mas *quais* idiomas um slot pode ter passou a
+depender de `card_set.region`:
+
+| Região | Idiomas que a coleção imprime |
+| --- | --- |
+| `west` | `en`, `pt` |
+| `jp` | `ja` |
+
+Pedir `--langs pt` numa coleção japonesa não gera nada, e é assim que deve ser.
+
+### Japonês não tem reverse holo
+
+Amostra de 54 cartas em três coleções de eras diferentes:
+
+| Coleção | Amostra | `reverse` | `holo` | `normal` |
+| --- | ---: | ---: | ---: | ---: |
+| `S6K` 漆黒のガイスト (2021) | 18 | **0** | 6 | 12 |
+| `SM7b` フェアリーライズ (2018) | 18 | **0** | 4 | 14 |
+| `PCG1` 拡張パック (2004) | 18 | **0** | 2 | 16 |
+
+Virou linha em `variant_policy` com `region = 'jp'`, prioridade 110. A API já
+responde certo, então a regra é rede de segurança — igual à do corte de 2002.
+
+### A `variant_policy` passou a falar por região
+
+Sem isso uma regra escrita para a era `e` do oeste casaria com a série `e`
+japonesa, que é outra coisa. Regras sem região continuam valendo nas duas.
+
+### Duas lacunas do catálogo japonês
+
+**Scan.** Só 30% das cartas japonesas têm foto, contra praticamente 100% no
+oeste. Em Sableye são 5 de 21. Coleções inteiras estão sem nenhuma: `MC`
+(774 cartas), `SV` (288), `S8b` (285), `M2a` (250), `SM8b` (250).
+
+**Nome.** 407 das 12.781 cartas (3%) têm o nome em alfabeto latino em vez do
+japonês, às vezes em minúscula: `PCG2-070` e `PCG8-062` vêm como `'sableye'`,
+`PCG5-002` como `'weepinbell'`. É lacuna de preenchimento do catálogo, não da
+carta. O dado é guardado como a API devolve; a tela capitaliza a primeira letra
+só para exibir. É um bom candidato a contribuição de volta ao TCGdex, que é
+open source — a mesma mitigação que o documento de arquitetura já prevê para a
+cobertura PT.
+
+## 9. "Sem scan" e "fora do catálogo" são coisas diferentes
+
+A primeira versão da tela chamava os dois de "sem scan em PT". São situações
+distintas e as duas existem em volume:
+
+| Situação | Cartas | O que significa |
+| --- | ---: | --- |
+| No catálogo PT, com foto | 12.746 | o TCGdex tem a carta em português e tem a imagem |
+| No catálogo PT, sem foto | 1.161 | a carta saiu em português; ninguém publicou scan |
+| Fora do catálogo PT | 9.829 | o TCGdex não tem registro nenhum dela em português |
+
+Para a curadoria a diferença é tudo. "Sem foto" é um slot que já dá para
+confirmar — o registro no catálogo é a evidência. "Fora do catálogo" é um slot
+que ninguém pode decidir sem a carta na mão ou um anúncio, e **não prova que a
+carta não existe em português**: o TCGdex não tem uma única carta em português
+antes de 2011, e o Brasil recebeu aquelas coleções.
+
+Em Sableye o recorte é nítido: dos 44 slots em português, 27 estão no catálogo
+(todos com foto) e 17 estão fora dele. Nenhum é "no catálogo sem foto". No
+japonês é o inverso: os 21 slots estão todos no catálogo, e 16 deles não têm
+foto.
+
+A consulta do masterset devolve os dois sinais separados, `has_scan` e
+`no_catalogo`, e a tela mostra cada um com a sua etiqueta.

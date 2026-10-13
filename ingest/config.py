@@ -14,6 +14,7 @@ class Config:
     tcgdex_base: str
     lang_pt: str
     lang_en: str
+    lang_ja: str
     concurrency: int
     timeout: float
     pokeapi_base: str
@@ -26,6 +27,9 @@ class Config:
             # 'pt', não 'pt-br'. Ver docs/achados-tcgdex.md.
             lang_pt=os.environ.get("TCGDEX_LANG_PT", "pt"),
             lang_en=os.environ.get("TCGDEX_LANG_EN", "en"),
+            # O catálogo japonês é outro produto, não tradução. Ver
+            # docs/achados-tcgdex.md.
+            lang_ja=os.environ.get("TCGDEX_LANG_JA", "ja"),
             concurrency=int(os.environ.get("TCGDEX_CONCURRENCY", "6")),
             timeout=float(os.environ.get("TCGDEX_TIMEOUT", "30")),
             pokeapi_base=os.environ.get("POKEAPI_BASE", "https://pokeapi.co/api/v2").rstrip("/"),

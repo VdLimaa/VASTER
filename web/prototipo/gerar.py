@@ -26,8 +26,8 @@ from ingest.db import connect, query  # noqa: E402
 # Só o que a tela usa. Preço e status entram quando a F3 e o login existirem.
 CAMPOS = (
     "set_id", "set_name", "serie_name", "set_release", "number", "card_name",
-    "rarity", "kind", "language", "exists_state", "has_pt_scan", "notes",
-    "source_url", "card_id", "set_count_official", "image_url",
+    "rarity", "kind", "language", "exists_state", "has_scan", "no_catalogo",
+    "notes", "source_url", "card_id", "set_count_official", "image_url", "region",
 )
 
 

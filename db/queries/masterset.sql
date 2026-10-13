@@ -10,6 +10,7 @@
 
 select
   s.slug                        as species_slug,
+  cs.region                     as region,
   cs.serie                      as serie,
   cs.serie_name                 as serie_name,
   cs.release_date               as set_release,
@@ -18,7 +19,7 @@ select
   cs.count_official             as set_count_official,
   c.tcgdex_id                   as card_id,
   c.number                      as number,
-  coalesce(c.name_pt, c.name_en) as card_name,
+  coalesce(c.name_pt, c.name_en, c.name_ja) as card_name,
   c.name_en                     as card_name_en,
   coalesce(c.rarity_pt, c.rarity_en) as rarity,
   v.id                          as variant_id,
@@ -29,11 +30,24 @@ select
   v.notes                       as notes,
   case v.language
     when 'pt' then coalesce(c.image_url_pt, c.image_url)
+    when 'ja' then c.image_url_ja
     else c.image_url
   end                           as image_url,
-  -- false num slot em PT significa que ninguém tem foto da impressão
-  -- brasileira. A imagem cai na inglesa, e a tela precisa dizer isso.
-  (c.image_url_pt is not null)  as has_pt_scan,
+  -- O TCGdex tem foto da impressão naquele idioma. false não quer dizer que a
+  -- carta não existe: quer dizer que ninguém publicou scan dela. Num slot em
+  -- PT a imagem cai na inglesa, e a tela precisa avisar.
+  case v.language
+    when 'pt' then c.image_url_pt is not null
+    when 'ja' then c.image_url_ja is not null
+    else c.image_url is not null
+  end                           as has_scan,
+  -- O TCGdex tem a carta naquele idioma, com ou sem foto. É o que separa
+  -- "não tenho a foto" de "não está no catálogo".
+  case v.language
+    when 'pt' then c.has_pt
+    when 'ja' then c.has_ja
+    else true
+  end                           as no_catalogo,
   ci.status                     as status,
   ci.quantity                   as quantity,
   ci.condition                  as condition,

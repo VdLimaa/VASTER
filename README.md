@@ -28,24 +28,29 @@ python -m ingest migrate
 
 ```bash
 python -m ingest species                    # 1.025 espécies da PokéAPI
-python -m ingest sets                       # 220 sets, ~5 s
-python -m ingest cards                      # 23.736 cartas em 2 requisições, ~8 s
-python -m ingest details --species sableye  # variants e dexId, 35 requisições
+python -m ingest sets                       # 404 coleções (220 oeste + 184 Japão)
+python -m ingest cards                      # 36.517 cartas em 3 requisições
+python -m ingest details --species sableye  # variants e dexId, 56 requisições
 python -m ingest links   --species sableye  # preenche card_species
-python -m ingest slots   --species sableye  # gera os 94 slots
+python -m ingest slots   --species sableye  # gera os 115 slots
 python -m ingest gate    --species sableye  # verifica o gate da F0
 ```
 
+`sets`, `cards`, `details` e `slots` aceitam `--region west|jp|all`, e o padrão
+é `all`. Para ficar só no catálogo ocidental, `--region west`.
+
 O `gate` sai com código 1 se falhar, então serve em CI. Resultado esperado: 27
-coleções físicas, 0 duplicatas, 4 cartas `Mega Sableye & Tyranitar GX` ligadas
-a `sableye` e `tyranitar`.
+coleções físicas do oeste, 13 japonesas, 0 duplicatas e 8 cartas
+`Mega Sableye & Tyranitar GX` — 4 ocidentais e 4 japonesas — ligadas a
+`sableye` e `tyranitar`.
 
 Para ver o masterset:
 
 ```bash
 python -m ingest masterset --species sableye
 python -m ingest masterset --species sableye --lang pt      # só português
-python -m ingest masterset --species sableye --lang pt,en   # os dois
+python -m ingest masterset --species sableye --lang pt,en   # ocidentais
+python -m ingest masterset --species sableye --lang ja      # só japonesas
 python -m ingest masterset --species sableye --json         # payload da rota da F2
 python -m ingest coverage                                   # cobertura PT por era
 ```
@@ -109,26 +114,61 @@ porque cada regra é dado de curadoria e precisa ser auditável. Uma linha veta
 | Reverse holo em Ultra Rara, Full Art, Rainbow e secretas | veta |
 | Reverse holo da era EX | anota: a RF traz o nome da coleção estampado |
 
-## Auto-confirmação dos slots em português
+## Japonês é outro catálogo
 
-Quando o TCGdex tem o scan em português de uma carta, o gerador promove **só o
-slot principal em PT** para `confirmed`, com a URL do scan em `source_url` e
-registro em `curation_event` com ator `generator:tcgdex-pt`.
+Não é tradução. São 184 coleções com ids próprios (`PMCG1`, `VS1`, `S6K`), e
+id de carta inglesa dá 404 em `ja`. Quatro ids colidem entre os dois catálogos
+sendo coleções **diferentes** — `neo1` é *Neo Genesis* em inglês e
+金、銀、新世界へ... em japonês — então a chave de `card_set` e de `card` é
+`(tcgdex_id, region)`.
+
+Uma carta japonesa não é o slot `ja` de uma carta inglesa: é outra carta, em
+outra coleção. Idioma continua sendo atributo do slot, mas *quais* idiomas um
+slot pode ter vem de `card_set.region`:
+
+| Região | Idiomas |
+| --- | --- |
+| `west` | `en`, `pt` |
+| `jp` | `ja` |
+
+Japonês não tem reverse holo — medido, 0 em 54 cartas amostradas de três eras —
+e isso é uma linha de `variant_policy` com `region = 'jp'`.
+
+## Auto-confirmação em lote
+
+Quando o TCGdex tem a carta naquele idioma, o gerador promove **só o slot
+principal** para `confirmed`, com a URL do scan em `source_url` e registro em
+`curation_event` com ator `generator:tcgdex-<idioma>`.
 
 Isso é a evidência de nível 3 da hierarquia do documento de arquitetura, feita
-em lote em vez de uma por uma. Em Sableye são 21 dos 94 slots resolvidos sem
-trabalho humano, e as 21 URLs foram conferidas uma a uma.
+em lote em vez de uma por uma. Em Sableye são 42 dos 115 slots resolvidos sem
+trabalho humano: 21 em português e 21 em japonês.
 
 Não promove a reverse holo: ter o scan da carta em português não prova nada
-sobre a RF em português. Para desligar, `slots --no-auto-confirm-pt`. Para
+sobre a RF em português. Para desligar, `slots --no-auto-confirm`. Para
 reverter o que já entrou:
 
 ```sql
 update card_variant v set exists_state = 'unknown', source_url = null,
                           checked_at = null
 from curation_event e
-where e.variant_id = v.id and e.actor = 'generator:tcgdex-pt';
+where e.variant_id = v.id and e.actor like 'generator:tcgdex-%';
 ```
+
+## Sem foto não é a mesma coisa que fora do catálogo
+
+A consulta do masterset devolve dois sinais por slot, e a tela mostra cada um
+com a sua etiqueta:
+
+| Sinal | Significado |
+| --- | --- |
+| `no_catalogo = false` | o TCGdex não tem registro nenhum da carta naquele idioma |
+| `no_catalogo = true, has_scan = false` | a carta está no catálogo, mas ninguém publicou foto |
+
+Para a curadoria a diferença é tudo. **Sem foto** é um slot que já dá para
+confirmar, porque o registro é a evidência. **Fora do catálogo** é um slot que
+ninguém decide sem a carta na mão — e não prova que a carta não existe, já que
+o TCGdex não tem uma única carta em português antes de 2011.
 
 ## Protótipo da tela
 
@@ -145,15 +185,14 @@ python web/prototipo/gerar.py --species sableye
 As imagens vêm por hotlink do CDN do TCGdex, `low.webp` na lista e `high.png` no
 detalhe. Nenhum scan é guardado no repositório: imagem de carta é da TPCi.
 
-Um slot em português sem `has_pt_scan` aparece marcado **sem scan PT** e cai na
-imagem inglesa. É o sinal mais útil da tela para quem vai curar: significa que
-ninguém tem foto da impressão brasileira daquela carta, e decidir o slot vai
-exigir a carta na mão.
+Os slots marcados **fora do catálogo** e **sem foto** são o que a tela tem de
+mais útil para quem vai curar. Ver a seção acima sobre a diferença entre os
+dois.
 
 ## Desenvolvimento
 
 ```bash
-pytest          # 66 testes, sem rede
+pytest          # 81 testes, sem rede
 ruff check .
 ```
 

@@ -40,6 +40,17 @@ FLAG_PARA_KIND: tuple[tuple[str, str], ...] = (
     ("wPromo", "promo"),
 )
 
+# Quais idiomas uma coleção daquela região chega a imprimir. Uma carta
+# japonesa não é o slot 'ja' de uma carta inglesa: é outra carta, em outra
+# coleção, e o único idioma possível dela é o japonês.
+IDIOMAS_POR_REGIAO: dict[str, tuple[str, ...]] = {
+    "west": ("en", "pt"),
+    "jp": ("ja",),
+}
+
+# Onde o scan daquele idioma mora em card, para a promoção em lote.
+SCAN_POR_IDIOMA = {"pt": "image_url_pt", "ja": "image_url_ja"}
+
 KIND_PARA_FLAG = {
     "regular": "normal",
     "holo": "holo",
@@ -57,6 +68,7 @@ class Politica:
     reason: str
     priority: int
     serie: str | None = None
+    region: str | None = None
     language: str | None = None
     rarity_regex: str | None = None
     min_set_release: dt.date | None = None
@@ -71,6 +83,7 @@ class Politica:
         language: str,
         rarity_en: str | None,
         set_release: dt.date | None,
+        region: str = "west",
     ) -> bool:
         if self.kind != kind:
             return False
@@ -78,6 +91,7 @@ class Politica:
         # prova de nada, e vetar por ela esconderia slot legítimo.
         return all(
             (
+                self.region is None or self.region == region,
                 self.serie is None or self.serie == serie,
                 self.language is None or self.language == language,
                 self.rarity_regex is None
@@ -106,6 +120,7 @@ def decidir(
     language: str,
     rarity_en: str | None,
     set_release: dt.date | None,
+    region: str = "west",
 ) -> Decisao:
     """Mais específica primeiro: ordena por priority desc e a primeira que
     casa decide. Sem regra, libera."""
@@ -118,6 +133,7 @@ def decidir(
             language=language,
             rarity_en=rarity_en,
             set_release=set_release,
+            region=region,
         )
     ]
     if not candidatas:
@@ -151,11 +167,21 @@ class Carta:
     api_variants: dict | None
     api_variants_detailed: list | None = None
     has_pt: bool = False
+    has_ja: bool = False
     image_url_pt: str | None = None
+    image_url_ja: str | None = None
+    region: str = "west"
     serie: str | None = None
     set_release: dt.date | None = None
     set_pt_release: str = "unknown"
     vetos: list[str] = field(default_factory=list)
+
+    def tem_catalogo(self, idioma: str) -> bool:
+        """O TCGdex tem esta carta naquele idioma."""
+        return {"pt": self.has_pt, "ja": self.has_ja}.get(idioma, False)
+
+    def scan(self, idioma: str) -> str | None:
+        return {"pt": self.image_url_pt, "ja": self.image_url_ja}.get(idioma)
 
 
 def kind_base(rarity_en: str | None) -> str:
@@ -200,23 +226,29 @@ def gerar_slots(
     carta: Carta,
     politicas: list[Politica],
     *,
-    idiomas: tuple[str, ...] = ("en", "pt"),
-    auto_confirmar_pt: bool = True,
+    idiomas: tuple[str, ...] = ("en", "pt", "ja"),
+    auto_confirmar: bool = True,
     base_api: str = "https://api.tcgdex.net/v2",
     lang_pt: str = "pt",
 ) -> list[Slot]:
     """Slots da carta, um por (kind, idioma), já filtrados pela política.
 
-    auto_confirmar_pt promove só o slot principal em português, e só quando o
-    TCGdex tem a carta em PT. Isso é a evidência de nível 3 do documento
-    ("scan em base pública"), aplicada em lote em vez de uma por uma — e é o
-    que impede a fila de curadoria de nascer com 13.900 itens óbvios.
-    A URL fica em source_url, então dá para auditar e reverter com um update.
+    Os idiomas pedidos são cruzados com os que a região da coleção imprime:
+    pedir 'pt' numa coleção japonesa não gera nada, e é assim que deve ser.
+
+    auto_confirmar promove só o slot principal, e só no idioma em que o
+    TCGdex tem a carta. Isso é a evidência de nível 3 do documento ("scan em
+    base pública"), aplicada em lote em vez de uma por uma — é o que impede a
+    fila de curadoria de nascer com milhares de itens óbvios. A URL fica em
+    source_url, então dá para auditar e reverter com um update.
     """
     kinds = kinds_da_carta(carta)
     slots: list[Slot] = []
+    possiveis = IDIOMAS_POR_REGIAO.get(carta.region, ("en",))
 
     for idioma in idiomas:
+        if idioma not in possiveis:
+            continue
         # Set que o Brasil não recebeu não gera slot em português.
         if idioma == "pt" and carta.set_pt_release == "no":
             continue
@@ -228,6 +260,7 @@ def gerar_slots(
                 language=idioma,
                 rarity_en=carta.rarity_en,
                 set_release=carta.set_release,
+                region=carta.region,
             )
             if not d.allowed:
                 carta.vetos.append(f"{kind}/{idioma}: {d.reason}")
@@ -235,15 +268,11 @@ def gerar_slots(
 
             principal = posicao == 0
             estado, fonte = "unknown", None
-            if (
-                auto_confirmar_pt
-                and idioma == "pt"
-                and principal
-                and carta.has_pt
-            ):
+            if auto_confirmar and principal and carta.tem_catalogo(idioma):
                 estado = "confirmed"
-                fonte = carta.image_url_pt or (
-                    f"{base_api}/{lang_pt}/cards/{carta.tcgdex_id}"
+                lang_api = lang_pt if idioma == "pt" else idioma
+                fonte = carta.scan(idioma) or (
+                    f"{base_api}/{lang_api}/cards/{carta.tcgdex_id}"
                 )
 
             slots.append(

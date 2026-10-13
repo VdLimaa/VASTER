@@ -32,13 +32,16 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("migrate", help="aplica as migrations pendentes")
     sub.add_parser("species", help="popula species a partir da PokéAPI")
-    sub.add_parser("sets", help="ingere sets e o overlay de nome em PT")
-    sub.add_parser("cards", help="ingere todas as cartas (2 requisições)")
+    st = sub.add_parser("sets", help="ingere sets e o overlay de nome em PT")
+    _regiao(st)
+    cd = sub.add_parser("cards", help="ingere todas as cartas (2 requisições)")
+    _regiao(cd)
     sub.add_parser("refresh", help="recalcula a materialized view de preço")
     sub.add_parser("coverage", help="relatório de cobertura PT por era")
 
     d = sub.add_parser("details", help="busca variants/rarity/dexId por carta")
     _escopo(d)
+    _regiao(d)
     d.add_argument("--refazer", action="store_true", help="rebusca o que já tem detalhe")
     d.add_argument("--limite", type=int, help="para no N-ésimo (útil para testar)")
 
@@ -48,12 +51,19 @@ def main(argv: list[str] | None = None) -> int:
 
     s = sub.add_parser("slots", help="gera os slots de variante")
     _escopo(s)
-    s.add_argument("--langs", default="en,pt", help="idiomas dos slots (padrão en,pt)")
+    _regiao(s)
     s.add_argument(
-        "--no-auto-confirm-pt",
+        "--langs",
+        default="en,pt,ja",
+        help="idiomas dos slots (padrão en,pt,ja). A região da coleção manda: "
+        "pedir pt numa coleção japonesa não gera nada",
+    )
+    s.add_argument(
+        "--no-auto-confirm",
         action="store_false",
-        dest="auto_confirmar_pt",
-        help="não promove o slot principal em PT mesmo com scan no TCGdex",
+        dest="auto_confirmar",
+        help="não promove o slot principal mesmo quando o TCGdex tem a carta "
+        "naquele idioma",
     )
 
     g = sub.add_parser("gate", help="verifica o gate da F0 para uma espécie")
@@ -89,11 +99,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.cmd == "sets":
-            print(asyncio.run(pipeline.ingerir_sets(conn, cfg)))
+            for regiao in _regioes(args):
+                print(asyncio.run(pipeline.ingerir_sets(conn, cfg, region=regiao)))
             return 0
 
         if args.cmd == "cards":
-            print(asyncio.run(pipeline.ingerir_cartas(conn, cfg)))
+            for regiao in _regioes(args):
+                print(asyncio.run(pipeline.ingerir_cartas(conn, cfg, region=regiao)))
             return 0
 
         if args.cmd == "details":
@@ -105,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
                         species_slug=args.species,
                         set_id=args.set,
                         todas=args.todas,
+                        region=None if args.region == "all" else args.region,
                         refazer=args.refazer,
                         limite=args.limite,
                     )
@@ -125,8 +138,9 @@ def main(argv: list[str] | None = None) -> int:
                     species_slug=args.species,
                     set_id=args.set,
                     todas=args.todas,
+                    region=None if args.region == "all" else args.region,
                     idiomas=idiomas,
-                    auto_confirmar_pt=args.auto_confirmar_pt,
+                    auto_confirmar=args.auto_confirmar,
                 )
             )
             return 0
@@ -148,6 +162,19 @@ def main(argv: list[str] | None = None) -> int:
             return _gate(conn, args.species)
 
     return 0
+
+
+def _regiao(sp: argparse.ArgumentParser) -> None:
+    sp.add_argument(
+        "--region",
+        choices=("west", "jp", "all"),
+        default="all",
+        help="catálogo: 'west' (en/pt), 'jp' (japonês) ou os dois. Padrão: all",
+    )
+
+
+def _regioes(args: argparse.Namespace) -> list[str]:
+    return ["west", "jp"] if args.region == "all" else [args.region]
 
 
 def _escopo(sp: argparse.ArgumentParser) -> None:
@@ -244,9 +271,10 @@ def _gate(conn, slug: str) -> int:
 
         cur.execute(query("gate_f0"), {"slug": slug})
         colecoes = cur.fetchall()
-        fisicas = [r for r in colecoes if not r["is_digital"]]
+        fisicas = [r for r in colecoes if not r["is_digital"] and r["region"] == "west"]
+        japonesas = [r for r in colecoes if not r["is_digital"] and r["region"] == "jp"]
         digitais = [r for r in colecoes if r["is_digital"]]
-        print(f"--- coleções físicas: {len(fisicas)} ---")
+        print(f"--- coleções físicas do oeste: {len(fisicas)} ---")
         for r in fisicas:
             print(
                 f"  {str(r['release_date'] or '-'):<11} {r['set_id']:<10} "
@@ -256,6 +284,13 @@ def _gate(conn, slug: str) -> int:
         if not fisicas:
             ok = False
             print("  FALHOU: nenhuma coleção física")
+        if japonesas:
+            print(f"\n--- coleções japonesas: {len(japonesas)} ---")
+            for r in japonesas:
+                print(
+                    f"  {str(r['release_date'] or '-'):<11} {r['set_id']:<10} "
+                    f"{(r['set_name'] or '')[:32]:<32} {r['cartas']:>2} carta(s)"
+                )
         if digitais:
             print(
                 f"\n--- Pokémon TCG Pocket (app, fora do masterset): "
@@ -277,14 +312,15 @@ def _gate(conn, slug: str) -> int:
         print(f"\n--- duplicatas: {len(dups)} (esperado 0) ---")
         for r in dups:
             ok = False
-            print(f"  FALHOU: {r['tcgdex_id']} aparece {r['vinculos']}x")
+            print(f"  FALHOU: {r['tcgdex_id']} [{r['region']}] aparece {r['vinculos']}x")
 
         cur.execute(query("gate_f0_multiespecie"), {"slug": slug})
         multi = cur.fetchall()
         print(f"\n--- cartas multiespécie: {len(multi)} ---")
         for r in multi:
             print(
-                f"  {r['tcgdex_id']:<12} {r['name_en'][:38]:<38} "
+                f"  {r['tcgdex_id']:<12} {r['region']:<5} "
+                f"{(r['nome'] or '')[:30]:<30} "
                 f"{r['especies']} via {r['resolvido_por']}"
             )
         if not multi:
