@@ -1,0 +1,20 @@
+# Sobe só o Postgres. A API e o scheduler entram na F2.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: vaster
+      POSTGRES_PASSWORD: vaster
+      POSTGRES_DB: vaster
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vaster -d vaster"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

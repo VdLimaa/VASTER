@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+# dados baixados da API em execuções locais
+var/
+
+# empacotamento para recuperar o trabalho fora do git remoto
+*.bundle
+*.patch
