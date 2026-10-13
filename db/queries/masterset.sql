@@ -30,7 +30,10 @@ select
   case v.language
     when 'pt' then coalesce(c.image_url_pt, c.image_url)
     else c.image_url
-  end                           as image_base,
+  end                           as image_url,
+  -- false num slot em PT significa que ninguém tem foto da impressão
+  -- brasileira. A imagem cai na inglesa, e a tela precisa dizer isso.
+  (c.image_url_pt is not null)  as has_pt_scan,
   ci.status                     as status,
   ci.quantity                   as quantity,
   ci.condition                  as condition,

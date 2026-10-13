@@ -44,8 +44,15 @@ Para ver o masterset:
 
 ```bash
 python -m ingest masterset --species sableye
-python -m ingest coverage     # cobertura PT por era
+python -m ingest masterset --species sableye --lang pt      # só português
+python -m ingest masterset --species sableye --lang pt,en   # os dois
+python -m ingest masterset --species sableye --json         # payload da rota da F2
+python -m ingest coverage                                   # cobertura PT por era
 ```
+
+`--lang` usa o parâmetro `languages` de `db/queries/masterset.sql`, que é o
+mesmo que a rota `GET /species/{slug}/masterset` vai expor. O idioma é atributo
+do slot, não do app: o mesmo colecionador mistura PT e EN no mesmo fichário.
 
 ## Comandos
 
@@ -122,6 +129,26 @@ update card_variant v set exists_state = 'unknown', source_url = null,
 from curation_event e
 where e.variant_id = v.id and e.actor = 'generator:tcgdex-pt';
 ```
+
+## Protótipo da tela
+
+`web/prototipo/` é um HTML solto, sem build, para validar a interação antes de
+escrever a tela em Next.js. Os chips de idioma, variante e situação funcionam, e
+o scan troca junto com o idioma — que é o motivo de `card.image_url_pt` existir
+separado de `card.image_url`.
+
+```bash
+python web/prototipo/gerar.py --species sableye
+# abre web/prototipo/sableye.html no navegador
+```
+
+As imagens vêm por hotlink do CDN do TCGdex, `low.webp` na lista e `high.png` no
+detalhe. Nenhum scan é guardado no repositório: imagem de carta é da TPCi.
+
+Um slot em português sem `has_pt_scan` aparece marcado **sem scan PT** e cai na
+imagem inglesa. É o sinal mais útil da tela para quem vai curar: significa que
+ninguém tem foto da impressão brasileira daquela carta, e decidir o slot vai
+exigir a carta na mão.
 
 ## Desenvolvimento
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 
 from . import pipeline
@@ -61,8 +62,13 @@ def main(argv: list[str] | None = None) -> int:
     m = sub.add_parser("masterset", help="imprime o masterset de uma espécie")
     m.add_argument("--species", required=True)
     m.add_argument("--user", type=int, help="id do usuário para trazer o status")
+    m.add_argument(
+        "--lang",
+        help="idiomas separados por vírgula ('pt', 'pt,en'). Padrão: todos",
+    )
     m.add_argument("--include-absent", action="store_true")
     m.add_argument("--include-digital", action="store_true")
+    m.add_argument("--json", action="store_true", help="saída em JSON")
 
     args = p.parse_args(argv)
     cfg = Config.from_env()
@@ -181,6 +187,9 @@ def _coverage(conn) -> None:
 
 
 def _masterset(conn, args) -> None:
+    idiomas = (
+        [x.strip() for x in args.lang.split(",") if x.strip()] if args.lang else None
+    )
     with conn.cursor() as cur:
         cur.execute(
             query("masterset"),
@@ -189,10 +198,17 @@ def _masterset(conn, args) -> None:
                 "user_id": args.user,
                 "include_absent": args.include_absent,
                 "include_digital": args.include_digital,
-                "languages": None,
+                "languages": idiomas,
             },
         )
         linhas = cur.fetchall()
+
+    if args.json:
+        # default=str converte date e Decimal. É o mesmo payload que a rota
+        # GET /species/{slug}/masterset vai devolver na F2.
+        print(json.dumps(linhas, ensure_ascii=False, indent=2, default=str))
+        return
+
     if not linhas:
         print(f"nenhum slot para '{args.species}'")
         return
@@ -205,7 +221,11 @@ def _masterset(conn, args) -> None:
             f"{r['language']:<3} {r['exists_state']:<10} {preco:>9}"
         )
     print("-" * 80)
-    print(f"{len(linhas)} slots")
+    por_idioma: dict[str, int] = {}
+    for r in linhas:
+        por_idioma[r["language"]] = por_idioma.get(r["language"], 0) + 1
+    detalhe = ", ".join(f"{n} em {lang}" for lang, n in sorted(por_idioma.items()))
+    print(f"{len(linhas)} slots ({detalhe})")
 
 
 def _gate(conn, slug: str) -> int:

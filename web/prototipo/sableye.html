@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body { margin: 0; font: 14px system-ui, sans-serif; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>Masterset Sableye</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: barra de filtro grudada no topo sobre a lista agrupada por era.
+   Uma linha é um slot, e um slot é uma compra. */
+:root {
+  --bg: #f7f6fa;
+  --surface: #ffffff;
+  --surface-2: #f0eef6;
+  --line: #e2dded;
+  --fg: #1b1726;
+  --fg-dim: #554e68;
+  --fg-mute: #8a82a0;
+  --accent: #5b3fd6;
+  --accent-soft: #ece7ff;
+  --ok: #10745a;
+  --ok-soft: #dcf2ea;
+  --wait: #8a5a00;
+  --wait-soft: #fbeed3;
+  --gem: #b82b45;
+  --gem-soft: #fbe4e8;
+  --display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --body: "Public Sans", ui-sans-serif, system-ui, sans-serif;
+  --data: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121018;
+    --surface: #1b1824;
+    --surface-2: #241f31;
+    --line: #342e46;
+    --fg: #edeaf5;
+    --fg-dim: #b5adc8;
+    --fg-mute: #7e7592;
+    --accent: #a98fff;
+    --accent-soft: #2b2246;
+    --ok: #55d3a4;
+    --ok-soft: #10352a;
+    --wait: #e3b55c;
+    --wait-soft: #392b10;
+    --gem: #ff7287;
+    --gem-soft: #3a1620;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121018;
+  --surface: #1b1824;
+  --surface-2: #241f31;
+  --line: #342e46;
+  --fg: #edeaf5;
+  --fg-dim: #b5adc8;
+  --fg-mute: #7e7592;
+  --accent: #a98fff;
+  --accent-soft: #2b2246;
+  --ok: #55d3a4;
+  --ok-soft: #10352a;
+  --wait: #e3b55c;
+  --wait-soft: #392b10;
+  --gem: #ff7287;
+  --gem-soft: #3a1620;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 920px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 56px; }
+
+/* --- cabeçalho --- */
+.eyebrow {
+  font-family: var(--data); font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--fg-mute); margin: 0 0 6px;
+}
+h1 {
+  font-family: var(--display); font-weight: 800; font-size: clamp(28px, 6vw, 40px);
+  line-height: 1.05; margin: 0 0 8px; text-wrap: balance; letter-spacing: -.02em;
+}
+.lede { margin: 0; color: var(--fg-dim); max-width: 58ch; }
+.lede b { color: var(--fg); font-weight: 600; }
+
+/* --- barra de filtro --- */
+.filtros {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px; margin: 22px 0 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.grupo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.grupo > .rotulo {
+  font-family: var(--data); font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--fg-mute); width: 62px; flex: none;
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: inherit; font-size: 13px; font-weight: 500;
+  padding: 6px 11px; border-radius: 999px; cursor: pointer;
+  background: var(--surface); color: var(--fg-dim);
+  border: 1px solid var(--line);
+  transition: background .12s, border-color .12s, color .12s;
+}
+.chip:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.chip[aria-pressed="true"] {
+  background: var(--accent-soft); color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+.chip:disabled { opacity: .42; cursor: not-allowed; }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip .n { font-family: var(--data); font-size: 11px; color: var(--fg-mute); }
+.chip[aria-pressed="true"] .n { color: color-mix(in srgb, var(--accent) 80%, var(--fg)); }
+.bandeira { width: 17px; height: 12px; border-radius: 2px; flex: none; display: block; }
+
+/* --- resumo --- */
+.resumo {
+  display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: baseline;
+  padding: 14px 2px 0; color: var(--fg-dim); font-size: 13px;
+}
+.resumo .total { font-family: var(--display); font-weight: 700; font-size: 20px; color: var(--fg); }
+.resumo .item { display: inline-flex; align-items: center; gap: 6px; }
+.ponto { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* --- lista --- */
+.era { margin-top: 26px; }
+.era > h2 {
+  font-family: var(--display); font-weight: 600; font-size: 13px;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--fg-mute);
+  margin: 0 0 8px; padding-bottom: 7px; border-bottom: 1px solid var(--line);
+  display: flex; justify-content: space-between; gap: 12px;
+}
+.era > h2 span { font-family: var(--data); text-transform: none; letter-spacing: 0; }
+.cole { margin-top: 14px; }
+.cole > h3 {
+  font-family: var(--body); font-weight: 600; font-size: 14px; margin: 0 0 6px;
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.cole > h3 .ano { font-family: var(--data); font-size: 11px; color: var(--fg-mute); font-weight: 500; }
+.linhas { display: flex; flex-direction: column; gap: 4px; }
+
+.slot {
+  display: grid; grid-template-columns: 34px 54px 1fr auto;
+  align-items: center; gap: 11px;
+  width: 100%; text-align: left; font: inherit; color: inherit;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 7px 10px 7px 7px; cursor: pointer;
+}
+.slot:hover { border-color: color-mix(in srgb, var(--accent) 38%, var(--line)); }
+.slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.slot .thumb {
+  width: 34px; aspect-ratio: 734 / 1024; border-radius: 3px; display: block;
+  background: var(--surface-2); object-fit: cover; max-width: 100%;
+}
+.slot .num {
+  font-family: var(--data); font-size: 12px; color: var(--fg-dim);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.slot .meio { min-width: 0; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.slot .nome { font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.slot .dir { display: flex; align-items: center; gap: 7px; flex: none; }
+
+.tag {
+  font-family: var(--data); font-size: 10px; letter-spacing: .05em;
+  padding: 2px 7px; border-radius: 5px; white-space: nowrap;
+  background: var(--surface-2); color: var(--fg-dim); border: 1px solid var(--line);
+}
+.tag.rf { background: var(--accent-soft); color: color-mix(in srgb, var(--accent) 75%, var(--fg)); border-color: transparent; }
+.tag.especial { background: var(--gem-soft); color: var(--gem); border-color: transparent; }
+.estado {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 500; white-space: nowrap;
+}
+.estado.ok { color: var(--ok); }
+.estado.wait { color: var(--wait); }
+.sem-scan { color: var(--fg-mute); font-size: 11px; font-family: var(--data); }
+
+/* --- detalhe --- */
+.detalhe {
+  display: grid; grid-template-columns: 132px 1fr; gap: 16px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-top: none; border-radius: 0 0 var(--radius) var(--radius);
+  margin-top: -5px; padding: 14px;
+}
+.detalhe img { width: 132px; max-width: 100%; border-radius: 5px; display: block; }
+.detalhe dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: baseline; font-size: 13px; min-width: 0; }
+.detalhe dt { color: var(--fg-mute); font-family: var(--data); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; }
+.detalhe dd { margin: 0; color: var(--fg); overflow-wrap: anywhere; }
+.detalhe .nota {
+  grid-column: 1 / -1; margin-top: 6px; padding: 9px 11px;
+  background: var(--wait-soft); color: color-mix(in srgb, var(--wait) 85%, var(--fg));
+  border-radius: 7px; font-size: 12.5px; line-height: 1.45;
+}
+.detalhe a { color: var(--accent); overflow-wrap: anywhere; }
+
+.vazio {
+  margin-top: 26px; padding: 28px 20px; text-align: center;
+  border: 1px dashed var(--line); border-radius: var(--radius); color: var(--fg-dim);
+}
+.vazio strong { display: block; font-family: var(--display); font-size: 17px; color: var(--fg); margin-bottom: 4px; }
+
+.rodape {
+  margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line);
+  color: var(--fg-mute); font-size: 12.5px; line-height: 1.6;
+}
+.rodape code {
+  font-family: var(--data); font-size: 11.5px; background: var(--surface-2);
+  padding: 1px 5px; border-radius: 4px; color: var(--fg-dim);
+}
+.rodape p { margin: 0 0 8px; }
+
+@media (max-width: 560px) {
+  .grupo > .rotulo { width: 100%; }
+  .slot { grid-template-columns: 30px 48px 1fr; row-gap: 6px; }
+  .slot .dir { grid-column: 2 / -1; }
+  .detalhe { grid-template-columns: 1fr; }
+  .detalhe img { width: 108px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Masterset BR · protótipo da tela da F2</p>
+  <h1>Sableye</h1>
+  <p class="lede">
+    Todo slot de variante que compõe o masterset, direto do banco da F0:
+    <b>88 slots</b> em 27 coleções físicas. Os chips filtram como
+    os da Liga, e o scan troca junto com o idioma.
+  </p>
+
+  <div class="filtros" role="group" aria-label="Filtros do masterset">
+    <div class="grupo" id="g-idioma">
+      <span class="rotulo">Idioma</span>
+      <button class="chip" type="button" data-idioma="pt" aria-pressed="true">
+        <svg class="bandeira" viewBox="0 0 28 20" aria-hidden="true">
+          <rect width="28" height="20" fill="#009739"/>
+          <path d="M14 2.4 25.6 10 14 17.6 2.4 10Z" fill="#fedd00"/>
+          <circle cx="14" cy="10" r="4.1" fill="#012169"/>
+        </svg>
+        Português <span class="n" data-contagem="pt"></span>
+      </button>
+      <button class="chip" type="button" data-idioma="en" aria-pressed="true">
+        <svg class="bandeira" viewBox="0 0 28 20" aria-hidden="true">
+          <rect width="28" height="20" fill="#f4f5f7"/>
+          <g fill="#b22234">
+            <rect y="0" width="28" height="2.86"/><rect y="5.71" width="28" height="2.86"/>
+            <rect y="11.43" width="28" height="2.86"/><rect y="17.14" width="28" height="2.86"/>
+          </g>
+          <rect width="12.6" height="11.43" fill="#3c3b6e"/>
+        </svg>
+        Inglês <span class="n" data-contagem="en"></span>
+      </button>
+      <button class="chip" type="button" data-idioma="ja" disabled
+              title="Japonês está fora do MVP; o enum lang do banco já aceita.">
+        <svg class="bandeira" viewBox="0 0 28 20" aria-hidden="true">
+          <rect width="28" height="20" fill="#f4f5f7"/>
+          <circle cx="14" cy="10" r="5.4" fill="#bc002d"/>
+        </svg>
+        Japonês <span class="n">fora do MVP</span>
+      </button>
+    </div>
+
+    <div class="grupo" id="g-variante">
+      <span class="rotulo">Variante</span>
+    </div>
+
+    <div class="grupo" id="g-estado">
+      <span class="rotulo">Situação</span>
+      <button class="chip" type="button" data-estado="todas" aria-pressed="true">Todas</button>
+      <button class="chip" type="button" data-estado="confirmed" aria-pressed="false">
+        Confirmadas <span class="n" data-contagem="confirmed"></span>
+      </button>
+      <button class="chip" type="button" data-estado="unknown" aria-pressed="false">
+        A confirmar <span class="n" data-contagem="unknown"></span>
+      </button>
+      <button class="chip" type="button" data-sem-scan aria-pressed="false"
+              title="Slots em português sem nenhuma foto da impressão brasileira.">
+        Sem scan em PT <span class="n" data-contagem="sem-scan"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="resumo" id="resumo"></div>
+  <div id="lista"></div>
+
+  <div class="rodape">
+    <p>
+      Dado real do pipeline da F0, gerado com
+      <code>python web/prototipo/gerar.py --species sableye</code>. Os slots
+      confirmados vieram do scan em português do TCGdex, com a URL guardada em
+      <code>source_url</code>.
+    </p>
+    <p>
+      Os scans vêm por hotlink do CDN do TCGdex, em <code>low.webp</code> na lista
+      e <code>high.png</code> no detalhe. Imagem de carta é da TPCi e não é
+      rehospedada, como manda o documento de arquitetura.
+    </p>
+  </div>
+</div>
+
+<script>
+const SLOTS = [{"set_id":"ex2","set_name":"Sandstorm","serie_name":"EX","set_release":"2003-09-18","number":"10","card_name":"Sableye","rarity":"Holo Rare","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":"Na era EX a reverse holo traz o nome da coleção estampado na arte. Confira a estampa antes de confirmar o slot.","source_url":null,"card_id":"ex2-10","set_count_official":100,"image_url":"https://assets.tcgdex.net/en/ex/ex2/10/high.png"},{"set_id":"ex2","set_name":"Sandstorm","serie_name":"EX","set_release":"2003-09-18","number":"10","card_name":"Sableye","rarity":"Holo Rare","kind":"holo","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"ex2-10","set_count_official":100,"image_url":"https://assets.tcgdex.net/en/ex/ex2/10/high.png"},{"set_id":"ex2","set_name":"Sandstorm","serie_name":"EX","set_release":"2003-09-18","number":"10","card_name":"Sableye","rarity":"Holo Rare","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":"Na era EX a reverse holo traz o nome da coleção estampado na arte. Confira a estampa antes de confirmar o slot.","source_url":null,"card_id":"ex2-10","set_count_official":100,"image_url":"https://assets.tcgdex.net/en/ex/ex2/10/high.png"},{"set_id":"ex2","set_name":"Sandstorm","serie_name":"EX","set_release":"2003-09-18","number":"10","card_name":"Sableye","rarity":"Holo Rare","kind":"holo","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"ex2-10","set_count_official":100,"image_url":"https://assets.tcgdex.net/en/ex/ex2/10/high.png"},{"set_id":"ex8","set_name":"EX Deoxys","serie_name":"EX","set_release":"2005-02-01","number":"23","card_name":"Sableye","rarity":"Rare","kind":"regular","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"ex8-23","set_count_official":107,"image_url":"https://assets.tcgdex.net/en/ex/ex8/23/high.png"},{"set_id":"ex8","set_name":"EX Deoxys","serie_name":"EX","set_release":"2005-02-01","number":"23","card_name":"Sableye","rarity":"Rare","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":"Na era EX a reverse holo traz o nome da coleção estampado na arte. Confira a estampa antes de confirmar o slot.","source_url":null,"card_id":"ex8-23","set_count_official":107,"image_url":"https://assets.tcgdex.net/en/ex/ex8/23/high.png"},{"set_id":"ex8","set_name":"EX Deoxys","serie_name":"EX","set_release":"2005-02-01","number":"23","card_name":"Sableye","rarity":"Rare","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"ex8-23","set_count_official":107,"image_url":"https://assets.tcgdex.net/en/ex/ex8/23/high.png"},{"set_id":"ex8","set_name":"EX Deoxys","serie_name":"EX","set_release":"2005-02-01","number":"23","card_name":"Sableye","rarity":"Rare","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":"Na era EX a reverse holo traz o nome da coleção estampado na arte. Confira a estampa antes de confirmar o slot.","source_url":null,"card_id":"ex8-23","set_count_official":107,"image_url":"https://assets.tcgdex.net/en/ex/ex8/23/high.png"},{"set_id":"ex13","set_name":"Holon Phantoms","serie_name":"EX","set_release":"2006-05-03","number":"31","card_name":"Sableye","rarity":"Rare","kind":"regular","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"ex13-31","set_count_official":110,"image_url":"https://assets.tcgdex.net/en/ex/ex13/31/high.png"},{"set_id":"ex13","set_name":"Holon Phantoms","serie_name":"EX","set_release":"2006-05-03","number":"31","card_name":"Sableye","rarity":"Rare","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"ex13-31","set_count_official":110,"image_url":"https://assets.tcgdex.net/en/ex/ex13/31/high.png"},{"set_id":"ex14","set_name":"Crystal Guardians","serie_name":"EX","set_release":"2006-08-30","number":"10","card_name":"Sableye","rarity":"Rare","kind":"holo","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"ex14-10","set_count_official":100,"image_url":"https://assets.tcgdex.net/en/ex/ex14/10/high.png"},{"set_id":"ex14","set_name":"Crystal Guardians","serie_name":"EX","set_release":"2006-08-30","number":"10","card_name":"Sableye","rarity":"Rare","kind":"holo","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"ex14-10","set_count_official":100,"image_url":"https://assets.tcgdex.net/en/ex/ex14/10/high.png"},{"set_id":"ex16","set_name":"Power Keepers","serie_name":"EX","set_release":"2007-02-17","number":"22","card_name":"Sableye","rarity":"Rare","kind":"regular","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"ex16-22","set_count_official":108,"image_url":"https://assets.tcgdex.net/en/ex/ex16/22/high.png"},{"set_id":"ex16","set_name":"Power Keepers","serie_name":"EX","set_release":"2007-02-17","number":"22","card_name":"Sableye","rarity":"Rare","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"ex16-22","set_count_official":108,"image_url":"https://assets.tcgdex.net/en/ex/ex16/22/high.png"},{"set_id":"dp3","set_name":"Maravilhas Secretas","serie_name":"Diamond & Pearl","set_release":"2007-11-01","number":"63","card_name":"Sableye","rarity":"Uncommon","kind":"regular","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"dp3-63","set_count_official":132,"image_url":"https://assets.tcgdex.net/en/dp/dp3/63/high.png"},{"set_id":"dp3","set_name":"Maravilhas Secretas","serie_name":"Diamond & Pearl","set_release":"2007-11-01","number":"63","card_name":"Sableye","rarity":"Uncommon","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"dp3-63","set_count_official":132,"image_url":"https://assets.tcgdex.net/en/dp/dp3/63/high.png"},{"set_id":"dp3","set_name":"Maravilhas Secretas","serie_name":"Diamond & Pearl","set_release":"2007-11-01","number":"63","card_name":"Sableye","rarity":"Uncommon","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"dp3-63","set_count_official":132,"image_url":"https://assets.tcgdex.net/en/dp/dp3/63/high.png"},{"set_id":"dp3","set_name":"Maravilhas Secretas","serie_name":"Diamond & Pearl","set_release":"2007-11-01","number":"63","card_name":"Sableye","rarity":"Uncommon","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"dp3-63","set_count_official":132,"image_url":"https://assets.tcgdex.net/en/dp/dp3/63/high.png"},{"set_id":"dp7","set_name":"Stormfront","serie_name":"Diamond & Pearl","set_release":"2008-11-01","number":"48","card_name":"Sableye","rarity":"Uncommon","kind":"regular","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"dp7-48","set_count_official":100,"image_url":"https://assets.tcgdex.net/en/dp/dp7/48/high.png"},{"set_id":"dp7","set_name":"Stormfront","serie_name":"Diamond & Pearl","set_release":"2008-11-01","number":"48","card_name":"Sableye","rarity":"Uncommon","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"dp7-48","set_count_official":100,"image_url":"https://assets.tcgdex.net/en/dp/dp7/48/high.png"},{"set_id":"dp7","set_name":"Stormfront","serie_name":"Diamond & Pearl","set_release":"2008-11-01","number":"48","card_name":"Sableye","rarity":"Uncommon","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"dp7-48","set_count_official":100,"image_url":"https://assets.tcgdex.net/en/dp/dp7/48/high.png"},{"set_id":"dp7","set_name":"Stormfront","serie_name":"Diamond & Pearl","set_release":"2008-11-01","number":"48","card_name":"Sableye","rarity":"Uncommon","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"dp7-48","set_count_official":100,"image_url":"https://assets.tcgdex.net/en/dp/dp7/48/high.png"},{"set_id":"pl3","set_name":"Supreme Victors","serie_name":"Platinum","set_release":"2009-08-19","number":"41","card_name":"Sableye G","rarity":"Rare","kind":"regular","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"pl3-41","set_count_official":147,"image_url":"https://assets.tcgdex.net/en/pl/pl3/41/high.png"},{"set_id":"pl3","set_name":"Supreme Victors","serie_name":"Platinum","set_release":"2009-08-19","number":"41","card_name":"Sableye G","rarity":"Rare","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"pl3-41","set_count_official":147,"image_url":"https://assets.tcgdex.net/en/pl/pl3/41/high.png"},{"set_id":"pl3","set_name":"Supreme Victors","serie_name":"Platinum","set_release":"2009-08-19","number":"41","card_name":"Sableye G","rarity":"Rare","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"pl3-41","set_count_official":147,"image_url":"https://assets.tcgdex.net/en/pl/pl3/41/high.png"},{"set_id":"pl3","set_name":"Supreme Victors","serie_name":"Platinum","set_release":"2009-08-19","number":"41","card_name":"Sableye G","rarity":"Rare","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"pl3-41","set_count_official":147,"image_url":"https://assets.tcgdex.net/en/pl/pl3/41/high.png"},{"set_id":"hgss3","set_name":"Destemido","serie_name":"HeartGold & SoulSilver","set_release":"2010-08-18","number":"35","card_name":"Sableye","rarity":"Uncommon","kind":"regular","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"hgss3-35","set_count_official":90,"image_url":"https://assets.tcgdex.net/en/hgss/hgss3/35/high.png"},{"set_id":"hgss3","set_name":"Destemido","serie_name":"HeartGold & SoulSilver","set_release":"2010-08-18","number":"35","card_name":"Sableye","rarity":"Uncommon","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"hgss3-35","set_count_official":90,"image_url":"https://assets.tcgdex.net/en/hgss/hgss3/35/high.png"},{"set_id":"hgss3","set_name":"Destemido","serie_name":"HeartGold & SoulSilver","set_release":"2010-08-18","number":"35","card_name":"Sableye","rarity":"Uncommon","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"hgss3-35","set_count_official":90,"image_url":"https://assets.tcgdex.net/en/hgss/hgss3/35/high.png"},{"set_id":"hgss3","set_name":"Destemido","serie_name":"HeartGold & SoulSilver","set_release":"2010-08-18","number":"35","card_name":"Sableye","rarity":"Uncommon","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"hgss3-35","set_count_official":90,"image_url":"https://assets.tcgdex.net/en/hgss/hgss3/35/high.png"},{"set_id":"bw5","set_name":"Exploradores da Escuridão","serie_name":"Black & White","set_release":"2012-05-09","number":"62","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/bw/bw5/62/high.png","card_id":"bw5-62","set_count_official":108,"image_url":"https://assets.tcgdex.net/pt/bw/bw5/62/high.png"},{"set_id":"bw5","set_name":"Exploradores da Escuridão","serie_name":"Black & White","set_release":"2012-05-09","number":"62","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"bw5-62","set_count_official":108,"image_url":"https://assets.tcgdex.net/en/bw/bw5/62/high.png"},{"set_id":"bw9","set_name":"Congelamento de Plasma","serie_name":"Black & White","set_release":"2013-05-08","number":"49","card_name":"Sableye","rarity":"Rara","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/bw/bw9/49/high.png","card_id":"bw9-49","set_count_official":116,"image_url":"https://assets.tcgdex.net/pt/bw/bw9/49/high.png"},{"set_id":"bw9","set_name":"Congelamento de Plasma","serie_name":"Black & White","set_release":"2013-05-08","number":"49","card_name":"Sableye","rarity":"Rara","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"bw9-49","set_count_official":116,"image_url":"https://assets.tcgdex.net/en/bw/bw9/49/high.png"},{"set_id":"xyp","set_name":"XY Black Star Promos","serie_name":"XY","set_release":"2013-10-12","number":"XY92","card_name":"Sableye","rarity":"Promo","kind":"regular","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"xyp-XY92","set_count_official":211,"image_url":"https://assets.tcgdex.net/en/xy/xyp/XY92/high.png"},{"set_id":"xyp","set_name":"XY Black Star Promos","serie_name":"XY","set_release":"2013-10-12","number":"XY92","card_name":"Sableye","rarity":"Promo","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"xyp-XY92","set_count_official":211,"image_url":"https://assets.tcgdex.net/en/xy/xyp/XY92/high.png"},{"set_id":"bw11","set_name":"Tesouros Lendários","serie_name":"Black & White","set_release":"2013-11-06","number":"61","card_name":"Sableye","rarity":"Uncommon","kind":"regular","language":"pt","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"bw11-61","set_count_official":113,"image_url":"https://assets.tcgdex.net/en/bw/bw11/61/high.png"},{"set_id":"bw11","set_name":"Tesouros Lendários","serie_name":"Black & White","set_release":"2013-11-06","number":"61","card_name":"Sableye","rarity":"Uncommon","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":false,"notes":null,"source_url":null,"card_id":"bw11-61","set_count_official":113,"image_url":"https://assets.tcgdex.net/en/bw/bw11/61/high.png"},{"set_id":"xy1","set_name":"XY","serie_name":"XY","set_release":"2014-02-05","number":"68","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/xy/xy1/68/high.png","card_id":"xy1-68","set_count_official":146,"image_url":"https://assets.tcgdex.net/pt/xy/xy1/68/high.png"},{"set_id":"xy1","set_name":"XY","serie_name":"XY","set_release":"2014-02-05","number":"68","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"xy1-68","set_count_official":146,"image_url":"https://assets.tcgdex.net/en/xy/xy1/68/high.png"},{"set_id":"xy7","set_name":"Origens Ancestrais","serie_name":"XY","set_release":"2015-08-12","number":"44","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/xy/xy7/44/high.png","card_id":"xy7-44","set_count_official":98,"image_url":"https://assets.tcgdex.net/pt/xy/xy7/44/high.png"},{"set_id":"xy7","set_name":"Origens Ancestrais","serie_name":"XY","set_release":"2015-08-12","number":"44","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"xy7-44","set_count_official":98,"image_url":"https://assets.tcgdex.net/en/xy/xy7/44/high.png"},{"set_id":"sm2","set_name":"Guardiões Ascendentes","serie_name":"Sun & Moon","set_release":"2017-05-05","number":"80","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/sm/sm2/80/high.png","card_id":"sm2-80","set_count_official":145,"image_url":"https://assets.tcgdex.net/pt/sm/sm2/80/high.png"},{"set_id":"sm2","set_name":"Guardiões Ascendentes","serie_name":"Sun & Moon","set_release":"2017-05-05","number":"80","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sm2-80","set_count_official":145,"image_url":"https://assets.tcgdex.net/en/sm/sm2/80/high.png"},{"set_id":"sm7","set_name":"Tempestade Celestial","serie_name":"Sun & Moon","set_release":"2018-08-03","number":"88","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/sm/sm7/88/high.png","card_id":"sm7-88","set_count_official":168,"image_url":"https://assets.tcgdex.net/pt/sm/sm7/88/high.png"},{"set_id":"sm7","set_name":"Tempestade Celestial","serie_name":"Sun & Moon","set_release":"2018-08-03","number":"88","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sm7-88","set_count_official":168,"image_url":"https://assets.tcgdex.net/en/sm/sm7/88/high.png"},{"set_id":"sm8","set_name":"Trovões Perdidos","serie_name":"Sun & Moon","set_release":"2018-11-02","number":"96","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/sm/sm8/96/high.png","card_id":"sm8-96","set_count_official":214,"image_url":"https://assets.tcgdex.net/pt/sm/sm8/96/high.png"},{"set_id":"sm8","set_name":"Trovões Perdidos","serie_name":"Sun & Moon","set_release":"2018-11-02","number":"96","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sm8-96","set_count_official":214,"image_url":"https://assets.tcgdex.net/en/sm/sm8/96/high.png"},{"set_id":"sm11","set_name":"Sintonia Mental ","serie_name":"Sun & Moon","set_release":"2019-08-02","number":"126","card_name":"Mega Sableye e Tyranitar GX","rarity":"Ultra Rara","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/sm/sm11/126/high.png","card_id":"sm11-126","set_count_official":236,"image_url":"https://assets.tcgdex.net/pt/sm/sm11/126/high.png"},{"set_id":"sm11","set_name":"Sintonia Mental ","serie_name":"Sun & Moon","set_release":"2019-08-02","number":"126","card_name":"Mega Sableye e Tyranitar GX","rarity":"Ultra Rara","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sm11-126","set_count_official":236,"image_url":"https://assets.tcgdex.net/en/sm/sm11/126/high.png"},{"set_id":"sm11","set_name":"Sintonia Mental ","serie_name":"Sun & Moon","set_release":"2019-08-02","number":"133","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/sm/sm11/133/high.png","card_id":"sm11-133","set_count_official":236,"image_url":"https://assets.tcgdex.net/pt/sm/sm11/133/high.png"},{"set_id":"sm11","set_name":"Sintonia Mental ","serie_name":"Sun & Moon","set_release":"2019-08-02","number":"133","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sm11-133","set_count_official":236,"image_url":"https://assets.tcgdex.net/en/sm/sm11/133/high.png"},{"set_id":"sm11","set_name":"Sintonia Mental ","serie_name":"Sun & Moon","set_release":"2019-08-02","number":"225","card_name":"Mega Sableye e Tyranitar GX","rarity":"Ultra Rara","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/sm/sm11/225/high.png","card_id":"sm11-225","set_count_official":236,"image_url":"https://assets.tcgdex.net/pt/sm/sm11/225/high.png"},{"set_id":"sm11","set_name":"Sintonia Mental ","serie_name":"Sun & Moon","set_release":"2019-08-02","number":"225","card_name":"Mega Sableye e Tyranitar GX","rarity":"Ultra Rara","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sm11-225","set_count_official":236,"image_url":"https://assets.tcgdex.net/en/sm/sm11/225/high.png"},{"set_id":"sm11","set_name":"Sintonia Mental ","serie_name":"Sun & Moon","set_release":"2019-08-02","number":"226","card_name":"Mega Sableye e Tyranitar GX","rarity":"Ultra Rara","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/sm/sm11/226/high.png","card_id":"sm11-226","set_count_official":236,"image_url":"https://assets.tcgdex.net/pt/sm/sm11/226/high.png"},{"set_id":"sm11","set_name":"Sintonia Mental ","serie_name":"Sun & Moon","set_release":"2019-08-02","number":"226","card_name":"Mega Sableye e Tyranitar GX","rarity":"Ultra Rara","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sm11-226","set_count_official":236,"image_url":"https://assets.tcgdex.net/en/sm/sm11/226/high.png"},{"set_id":"sm11","set_name":"Sintonia Mental ","serie_name":"Sun & Moon","set_release":"2019-08-02","number":"245","card_name":"Mega Sableye e Tyranitar GX","rarity":"Rare Secreta","kind":"gold","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/sm/sm11/245/high.png","card_id":"sm11-245","set_count_official":236,"image_url":"https://assets.tcgdex.net/pt/sm/sm11/245/high.png"},{"set_id":"sm11","set_name":"Sintonia Mental ","serie_name":"Sun & Moon","set_release":"2019-08-02","number":"245","card_name":"Mega Sableye e Tyranitar GX","rarity":"Rare Secreta","kind":"gold","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sm11-245","set_count_official":236,"image_url":"https://assets.tcgdex.net/en/sm/sm11/245/high.png"},{"set_id":"swsh1","set_name":"Espada e Escudo","serie_name":"Sword & Shield","set_release":"2020-02-07","number":"120","card_name":"Sableye V","rarity":"Rara Holo V","kind":"holo","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/swsh/swsh1/120/high.png","card_id":"swsh1-120","set_count_official":202,"image_url":"https://assets.tcgdex.net/pt/swsh/swsh1/120/high.png"},{"set_id":"swsh1","set_name":"Espada e Escudo","serie_name":"Sword & Shield","set_release":"2020-02-07","number":"120","card_name":"Sableye V","rarity":"Rara Holo V","kind":"holo","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"swsh1-120","set_count_official":202,"image_url":"https://assets.tcgdex.net/en/swsh/swsh1/120/high.png"},{"set_id":"swsh1","set_name":"Espada e Escudo","serie_name":"Sword & Shield","set_release":"2020-02-07","number":"194","card_name":"Sableye V","rarity":"Ultra Rara","kind":"holo","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/swsh/swsh1/194/high.png","card_id":"swsh1-194","set_count_official":202,"image_url":"https://assets.tcgdex.net/pt/swsh/swsh1/194/high.png"},{"set_id":"swsh1","set_name":"Espada e Escudo","serie_name":"Sword & Shield","set_release":"2020-02-07","number":"194","card_name":"Sableye V","rarity":"Ultra Rara","kind":"holo","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"swsh1-194","set_count_official":202,"image_url":"https://assets.tcgdex.net/en/swsh/swsh1/194/high.png"},{"set_id":"swsh4","set_name":"Voltagem Vívida","serie_name":"Sword & Shield","set_release":"2020-11-13","number":"105","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/swsh/swsh4/105/high.png","card_id":"swsh4-105","set_count_official":185,"image_url":"https://assets.tcgdex.net/pt/swsh/swsh4/105/high.png"},{"set_id":"swsh4","set_name":"Voltagem Vívida","serie_name":"Sword & Shield","set_release":"2020-11-13","number":"105","card_name":"Sableye","rarity":"Incomum","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"swsh4-105","set_count_official":185,"image_url":"https://assets.tcgdex.net/pt/swsh/swsh4/105/high.png"},{"set_id":"swsh4","set_name":"Voltagem Vívida","serie_name":"Sword & Shield","set_release":"2020-11-13","number":"105","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"swsh4-105","set_count_official":185,"image_url":"https://assets.tcgdex.net/en/swsh/swsh4/105/high.png"},{"set_id":"swsh4","set_name":"Voltagem Vívida","serie_name":"Sword & Shield","set_release":"2020-11-13","number":"105","card_name":"Sableye","rarity":"Incomum","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"swsh4-105","set_count_official":185,"image_url":"https://assets.tcgdex.net/en/swsh/swsh4/105/high.png"},{"set_id":"swsh7","set_name":"Céus em Evolução","serie_name":"Sword & Shield","set_release":"2021-08-27","number":"67","card_name":"Sableye","rarity":"Comum","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/swsh/swsh7/67/high.png","card_id":"swsh7-67","set_count_official":203,"image_url":"https://assets.tcgdex.net/pt/swsh/swsh7/67/high.png"},{"set_id":"swsh7","set_name":"Céus em Evolução","serie_name":"Sword & Shield","set_release":"2021-08-27","number":"67","card_name":"Sableye","rarity":"Comum","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"swsh7-67","set_count_official":203,"image_url":"https://assets.tcgdex.net/pt/swsh/swsh7/67/high.png"},{"set_id":"swsh7","set_name":"Céus em Evolução","serie_name":"Sword & Shield","set_release":"2021-08-27","number":"67","card_name":"Sableye","rarity":"Comum","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"swsh7-67","set_count_official":203,"image_url":"https://assets.tcgdex.net/en/swsh/swsh7/67/high.png"},{"set_id":"swsh7","set_name":"Céus em Evolução","serie_name":"Sword & Shield","set_release":"2021-08-27","number":"67","card_name":"Sableye","rarity":"Comum","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"swsh7-67","set_count_official":203,"image_url":"https://assets.tcgdex.net/en/swsh/swsh7/67/high.png"},{"set_id":"swsh11","set_name":"Origem Perdida","serie_name":"Sword & Shield","set_release":"2022-09-09","number":"070","card_name":"Sableye","rarity":"Rara Holo","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"swsh11-070","set_count_official":196,"image_url":"https://assets.tcgdex.net/pt/swsh/swsh11/070/high.png"},{"set_id":"swsh11","set_name":"Origem Perdida","serie_name":"Sword & Shield","set_release":"2022-09-09","number":"070","card_name":"Sableye","rarity":"Rara Holo","kind":"holo","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/swsh/swsh11/070/high.png","card_id":"swsh11-070","set_count_official":196,"image_url":"https://assets.tcgdex.net/pt/swsh/swsh11/070/high.png"},{"set_id":"swsh11","set_name":"Origem Perdida","serie_name":"Sword & Shield","set_release":"2022-09-09","number":"070","card_name":"Sableye","rarity":"Rara Holo","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"swsh11-070","set_count_official":196,"image_url":"https://assets.tcgdex.net/en/swsh/swsh11/070/high.png"},{"set_id":"swsh11","set_name":"Origem Perdida","serie_name":"Sword & Shield","set_release":"2022-09-09","number":"070","card_name":"Sableye","rarity":"Rara Holo","kind":"holo","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"swsh11-070","set_count_official":196,"image_url":"https://assets.tcgdex.net/en/swsh/swsh11/070/high.png"},{"set_id":"sv02","set_name":"Evoluções em Paldea","serie_name":"Scarlet & Violet","set_release":"2023-06-09","number":"136","card_name":"Sableye","rarity":"Rara","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sv02-136","set_count_official":193,"image_url":"https://assets.tcgdex.net/pt/sv/sv02/136/high.png"},{"set_id":"sv02","set_name":"Evoluções em Paldea","serie_name":"Scarlet & Violet","set_release":"2023-06-09","number":"136","card_name":"Sableye","rarity":"Rara","kind":"holo","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/sv/sv02/136/high.png","card_id":"sv02-136","set_count_official":193,"image_url":"https://assets.tcgdex.net/pt/sv/sv02/136/high.png"},{"set_id":"sv02","set_name":"Evoluções em Paldea","serie_name":"Scarlet & Violet","set_release":"2023-06-09","number":"136","card_name":"Sableye","rarity":"Rara","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sv02-136","set_count_official":193,"image_url":"https://assets.tcgdex.net/en/sv/sv02/136/high.png"},{"set_id":"sv02","set_name":"Evoluções em Paldea","serie_name":"Scarlet & Violet","set_release":"2023-06-09","number":"136","card_name":"Sableye","rarity":"Rara","kind":"holo","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sv02-136","set_count_official":193,"image_url":"https://assets.tcgdex.net/en/sv/sv02/136/high.png"},{"set_id":"sv04.5","set_name":"Destinos de Paldea","serie_name":"Scarlet & Violet","set_release":"2024-01-26","number":"184","card_name":"Sableye","rarity":"Shiny rara","kind":"shiny","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/sv/sv04.5/184/high.png","card_id":"sv04.5-184","set_count_official":91,"image_url":"https://assets.tcgdex.net/pt/sv/sv04.5/184/high.png"},{"set_id":"sv04.5","set_name":"Destinos de Paldea","serie_name":"Scarlet & Violet","set_release":"2024-01-26","number":"184","card_name":"Sableye","rarity":"Shiny rara","kind":"shiny","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sv04.5-184","set_count_official":91,"image_url":"https://assets.tcgdex.net/en/sv/sv04.5/184/high.png"},{"set_id":"sv05","set_name":"Forças Temporais","serie_name":"Scarlet & Violet","set_release":"2024-03-22","number":"107","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/sv/sv05/107/high.png","card_id":"sv05-107","set_count_official":162,"image_url":"https://assets.tcgdex.net/pt/sv/sv05/107/high.png"},{"set_id":"sv05","set_name":"Forças Temporais","serie_name":"Scarlet & Violet","set_release":"2024-03-22","number":"107","card_name":"Sableye","rarity":"Incomum","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sv05-107","set_count_official":162,"image_url":"https://assets.tcgdex.net/pt/sv/sv05/107/high.png"},{"set_id":"sv05","set_name":"Forças Temporais","serie_name":"Scarlet & Violet","set_release":"2024-03-22","number":"107","card_name":"Sableye","rarity":"Incomum","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sv05-107","set_count_official":162,"image_url":"https://assets.tcgdex.net/en/sv/sv05/107/high.png"},{"set_id":"sv05","set_name":"Forças Temporais","serie_name":"Scarlet & Violet","set_release":"2024-03-22","number":"107","card_name":"Sableye","rarity":"Incomum","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"sv05-107","set_count_official":162,"image_url":"https://assets.tcgdex.net/en/sv/sv05/107/high.png"},{"set_id":"me02","set_name":"Fogo Fantasmagórico","serie_name":"Mega Evolution","set_release":"2025-11-14","number":"059","card_name":"Sableye","rarity":"Comum","kind":"regular","language":"pt","exists_state":"confirmed","has_pt_scan":true,"notes":null,"source_url":"https://assets.tcgdex.net/pt/me/me02/059/high.png","card_id":"me02-059","set_count_official":94,"image_url":"https://assets.tcgdex.net/pt/me/me02/059/high.png"},{"set_id":"me02","set_name":"Fogo Fantasmagórico","serie_name":"Mega Evolution","set_release":"2025-11-14","number":"059","card_name":"Sableye","rarity":"Comum","kind":"reverse_holo","language":"pt","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"me02-059","set_count_official":94,"image_url":"https://assets.tcgdex.net/pt/me/me02/059/high.png"},{"set_id":"me02","set_name":"Fogo Fantasmagórico","serie_name":"Mega Evolution","set_release":"2025-11-14","number":"059","card_name":"Sableye","rarity":"Comum","kind":"regular","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"me02-059","set_count_official":94,"image_url":"https://assets.tcgdex.net/en/me/me02/059/high.png"},{"set_id":"me02","set_name":"Fogo Fantasmagórico","serie_name":"Mega Evolution","set_release":"2025-11-14","number":"059","card_name":"Sableye","rarity":"Comum","kind":"reverse_holo","language":"en","exists_state":"unknown","has_pt_scan":true,"notes":null,"source_url":null,"card_id":"me02-059","set_count_official":94,"image_url":"https://assets.tcgdex.net/en/me/me02/059/high.png"}];
+
+const VARIANTES = {
+  regular: "Normal", reverse_holo: "RF", holo: "Holo", first_edition: "1ª edição",
+  promo: "Promo", full_art: "Full Art", alt_art: "Alt Art", rainbow: "Rainbow",
+  gold: "Gold", shiny: "Shiny",
+};
+const ESPECIAIS = new Set(["full_art", "alt_art", "rainbow", "gold", "shiny"]);
+const ESTADOS = {
+  confirmed: ["ok", "confirmada"], unknown: ["wait", "a confirmar"],
+  unlikely: ["wait", "improvável"], absent: ["", "não existe"],
+};
+const CHAVE = "vaster.masterset.filtros";
+
+const estado = carregar() || { idiomas: ["pt", "en"], variante: "todas", situacao: "todas", semScan: false };
+let aberto = null;
+
+function carregar() {
+  try {
+    const cru = localStorage.getItem(CHAVE);
+    if (!cru) return null;
+    const v = JSON.parse(cru);
+    if (!Array.isArray(v.idiomas)) return null;
+    return v;
+  } catch { return null; }
+}
+function salvar() {
+  try { localStorage.setItem(CHAVE, JSON.stringify(estado)); } catch { /* sessão privada */ }
+}
+
+function rotuloVariante(k) { return VARIANTES[k] || k; }
+
+/* Os chips de variante saem do dado, não de uma lista fixa: espécie sem Full
+   Art não deve mostrar um filtro de Full Art que não filtra nada. */
+function montarChipsVariante() {
+  const grupo = document.getElementById("g-variante");
+  const kinds = [...new Set(SLOTS.map((s) => s.kind))].sort(
+    (a, b) => Object.keys(VARIANTES).indexOf(a) - Object.keys(VARIANTES).indexOf(b)
+  );
+  const fazer = (valor, texto) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chip";
+    b.dataset.variante = valor;
+    b.innerHTML = texto + ' <span class="n" data-contagem="k:' + valor + '"></span>';
+    if (valor === "todas") b.innerHTML = texto;
+    grupo.appendChild(b);
+  };
+  fazer("todas", "Todas");
+  kinds.forEach((k) => fazer(k, rotuloVariante(k)));
+}
+
+function passaIdioma(s) { return estado.idiomas.includes(s.language); }
+function visiveis() {
+  return SLOTS.filter((s) => {
+    if (!passaIdioma(s)) return false;
+    if (estado.variante !== "todas" && s.kind !== estado.variante) return false;
+    if (estado.situacao !== "todas" && s.exists_state !== estado.situacao) return false;
+    if (estado.semScan && !(s.language === "pt" && !s.has_pt_scan)) return false;
+    return true;
+  });
+}
+
+function contar() {
+  const base = SLOTS.filter((s) => passaIdioma(s));
+  const n = {};
+  for (const lang of ["pt", "en"]) {
+    n[lang] = SLOTS.filter((s) => s.language === lang).length;
+  }
+  n.confirmed = base.filter((s) => s.exists_state === "confirmed").length;
+  n.unknown = base.filter((s) => s.exists_state === "unknown").length;
+  n["sem-scan"] = base.filter((s) => s.language === "pt" && !s.has_pt_scan).length;
+  for (const k of new Set(SLOTS.map((s) => s.kind))) {
+    n["k:" + k] = base.filter((s) => s.kind === k).length;
+  }
+  document.querySelectorAll("[data-contagem]").forEach((el) => {
+    const chave = el.dataset.contagem;
+    if (chave in n) el.textContent = n[chave];
+  });
+}
+
+function sincronizarChips() {
+  document.querySelectorAll("[data-idioma]").forEach((b) => {
+    b.setAttribute("aria-pressed", String(estado.idiomas.includes(b.dataset.idioma)));
+  });
+  document.querySelectorAll("[data-variante]").forEach((b) => {
+    b.setAttribute("aria-pressed", String(estado.variante === b.dataset.variante));
+  });
+  document.querySelectorAll("[data-estado]").forEach((b) => {
+    b.setAttribute("aria-pressed", String(estado.situacao === b.dataset.estado));
+  });
+  document.querySelector("[data-sem-scan]").setAttribute("aria-pressed", String(estado.semScan));
+}
+
+function pintarResumo(lista) {
+  const r = document.getElementById("resumo");
+  if (!estado.idiomas.length) { r.innerHTML = ""; return; }
+  const conf = lista.filter((s) => s.exists_state === "confirmed").length;
+  const semScan = lista.filter((s) => s.language === "pt" && !s.has_pt_scan).length;
+  const cartas = new Set(lista.map((s) => s.card_id)).size;
+  r.innerHTML =
+    '<span class="total">' + lista.length + " slot" + (lista.length === 1 ? "" : "s") + "</span>" +
+    '<span class="item">em ' + cartas + " carta" + (cartas === 1 ? "" : "s") + "</span>" +
+    '<span class="item"><i class="ponto" style="background:var(--ok)"></i>' + conf + " confirmad" + (conf === 1 ? "a" : "as") + "</span>" +
+    (semScan ? '<span class="item"><i class="ponto" style="background:var(--fg-mute)"></i>' + semScan + " sem scan em PT</span>" : "");
+}
+
+function pintarLista(lista) {
+  const alvo = document.getElementById("lista");
+  if (!estado.idiomas.length) {
+    alvo.innerHTML =
+      '<div class="vazio"><strong>Escolha pelo menos um idioma</strong>' +
+      "O masterset é montado por idioma: o mesmo colecionador mistura PT e EN no mesmo fichário.</div>";
+    return;
+  }
+  if (!lista.length) {
+    alvo.innerHTML =
+      '<div class="vazio"><strong>Nenhum slot com esses filtros</strong>' +
+      "Afrouxe a variante ou a situação.</div>";
+    return;
+  }
+
+  const eras = new Map();
+  for (const s of lista) {
+    const era = s.serie_name || "—";
+    if (!eras.has(era)) eras.set(era, new Map());
+    const coles = eras.get(era);
+    if (!coles.has(s.set_id)) coles.set(s.set_id, []);
+    coles.get(s.set_id).push(s);
+  }
+
+  let html = "";
+  for (const [era, coles] of eras) {
+    const nEra = [...coles.values()].reduce((a, v) => a + v.length, 0);
+    html += '<section class="era"><h2>' + esc(era) + "<span>" + nEra + "</span></h2>";
+    for (const [, slots] of coles) {
+      const p = slots[0];
+      const ano = (p.set_release || "").slice(0, 4);
+      html +=
+        '<div class="cole"><h3>' + esc(p.set_name || p.set_id) +
+        '<span class="ano">' + esc(p.set_id) + (ano ? " · " + ano : "") + "</span></h3>" +
+        '<div class="linhas">';
+      for (const s of slots) html += linha(s);
+      html += "</div></div>";
+    }
+    html += "</section>";
+  }
+  alvo.innerHTML = html;
+}
+
+function linha(s) {
+  const id = s.card_id + "|" + s.kind + "|" + s.language;
+  const [classe, texto] = ESTADOS[s.exists_state] || ["", s.exists_state];
+  const total = s.set_count_official;
+  const numero = total
+    ? String(s.number).padStart(String(total).length, "0") + "/" + total
+    : s.number;
+  const tagClasse = s.kind === "reverse_holo" ? "tag rf" : ESPECIAIS.has(s.kind) ? "tag especial" : "tag";
+  const semScan = s.language === "pt" && !s.has_pt_scan;
+  let h =
+    '<button class="slot" type="button" data-slot="' + esc(id) + '" aria-expanded="' + (aberto === id) + '">' +
+    (s.image_url ? '<img class="thumb" src="' + esc(leve(s.image_url)) + '" alt="" loading="lazy">' : '<span class="thumb"></span>') +
+    '<span class="num">' + esc(numero) + "</span>" +
+    '<span class="meio"><span class="nome">' + esc(s.card_name || "") + "</span>" +
+    '<span class="' + tagClasse + '">' + esc(rotuloVariante(s.kind)) + "</span>" +
+    (semScan ? '<span class="sem-scan">sem scan PT</span>' : "") +
+    "</span>" +
+    '<span class="dir">' + bandeira(s.language) +
+    '<span class="estado ' + classe + '"><i class="ponto" style="background:currentColor"></i>' + esc(texto) + "</span>" +
+    "</span></button>";
+  if (aberto === id) h += detalhe(s);
+  return h;
+}
+
+function bandeira(lang) {
+  if (lang === "pt") {
+    return '<svg class="bandeira" viewBox="0 0 28 20" aria-label="português" role="img">' +
+      '<rect width="28" height="20" fill="#009739"/><path d="M14 2.4 25.6 10 14 17.6 2.4 10Z" fill="#fedd00"/>' +
+      '<circle cx="14" cy="10" r="4.1" fill="#012169"/></svg>';
+  }
+  if (lang === "en") {
+    return '<svg class="bandeira" viewBox="0 0 28 20" aria-label="inglês" role="img">' +
+      '<rect width="28" height="20" fill="#f4f5f7"/><g fill="#b22234">' +
+      '<rect width="28" height="2.86"/><rect y="5.71" width="28" height="2.86"/>' +
+      '<rect y="11.43" width="28" height="2.86"/><rect y="17.14" width="28" height="2.86"/></g>' +
+      '<rect width="12.6" height="11.43" fill="#3c3b6e"/></svg>';
+  }
+  return '<span class="tag">' + esc(lang) + "</span>";
+}
+
+function detalhe(s) {
+  const linhas = [
+    ["raridade", s.rarity || "—"],
+    ["coleção", (s.set_name || s.set_id) + " · " + s.set_id],
+    ["carta", s.card_id],
+    ["slot", rotuloVariante(s.kind) + " · " + (s.language === "pt" ? "português" : "inglês")],
+  ];
+  let dl = linhas.map(([k, v]) => "<dt>" + esc(k) + "</dt><dd>" + esc(String(v)) + "</dd>").join("");
+  if (s.source_url) {
+    dl += "<dt>prova</dt><dd><a href=" + JSON.stringify(s.source_url) +
+      ' target="_blank" rel="noopener">' + esc(s.source_url.replace(/^https?:\/\//, "")) + "</a></dd>";
+  }
+  if (s.language === "pt" && !s.has_pt_scan) {
+    dl += '<p class="nota">O TCGdex não tem foto da impressão brasileira desta carta. A imagem acima é o scan em inglês. Decidir este slot pede a carta na mão ou um anúncio que mostre a impressão em português.</p>';
+  }
+  if (s.notes) dl += '<p class="nota">' + esc(s.notes) + "</p>";
+  return '<div class="detalhe">' +
+    (s.image_url ? '<img src="' + esc(s.image_url) + '" alt="Scan de ' + esc(s.card_name || "") + '" loading="lazy">' : "<div></div>") +
+    "<dl>" + dl + "</dl></div>";
+}
+
+/* O CDN do TCGdex serve a mesma carta em /low.webp (16 KB) e /high.png
+   (330 KB). A lista usa a leve; o detalhe aberto usa a cheia. */
+function leve(url) { return url.replace(/\/high\.png$/, "/low.webp"); }
+
+function esc(t) {
+  return String(t).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+function pintar() {
+  const lista = visiveis();
+  sincronizarChips();
+  contar();
+  pintarResumo(lista);
+  pintarLista(lista);
+}
+
+document.addEventListener("click", (ev) => {
+  const chip = ev.target.closest(".chip");
+  if (chip && !chip.disabled) {
+    if (chip.dataset.idioma) {
+      const l = chip.dataset.idioma;
+      estado.idiomas = estado.idiomas.includes(l)
+        ? estado.idiomas.filter((x) => x !== l)
+        : [...estado.idiomas, l];
+    } else if (chip.dataset.variante) {
+      estado.variante = chip.dataset.variante;
+    } else if (chip.dataset.estado) {
+      estado.situacao = chip.dataset.estado;
+    } else if ("semScan" in chip.dataset) {
+      estado.semScan = !estado.semScan;
+    }
+    salvar();
+    pintar();
+    return;
+  }
+  const slot = ev.target.closest(".slot");
+  if (slot) {
+    aberto = aberto === slot.dataset.slot ? null : slot.dataset.slot;
+    pintar();
+  }
+});
+
+montarChipsVariante();
+pintar();
+</script>
+</body>
+</html>
