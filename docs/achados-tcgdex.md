@@ -431,3 +431,75 @@ principal em inglês nascer confirmado também.
 
 Tempo total, do banco vazio ao catálogo completo: cerca de **7 minutos**, dos
 quais 6 são as 12.781 requisições do catálogo japonês.
+
+## 15. A flag `reverse` do TCGdex falta em eras inteiras
+
+O achado mais grave da investigação, e o que mais afeta o produto.
+
+Percentual de cartas Common, Uncommon, Rare e Rare Holo com `variants.reverse
+= true`, por era, no catálogo ocidental inteiro:
+
+| Era | Desde | Alvo | Com RF | % |
+| --- | --- | ---: | ---: | ---: |
+| Legendary Collection | 2002-05-24 | 91 | 91 | 100% |
+| E-Card | 2002-09-15 | 437 | 434 | 99% |
+| EX | 2003-07-01 | 1.655 | 875 | 53% |
+| POP | 2003-10-01 | 193 | 7 | 4% |
+| Trainer kits | 2004-07-01 | 251 | 0 | 0% |
+| Diamond & Pearl | 2007-05-01 | 869 | 801 | 92% |
+| Platinum | 2009-02-11 | 433 | 415 | 96% |
+| HeartGold & SoulSilver | 2010-02-10 | 320 | 309 | 97% |
+| Call of Legends | 2011-02-09 | 73 | 65 | 89% |
+| **Black & White** | **2011-04-25** | **1.345** | **5** | **0%** |
+| **XY** | **2013-10-12** | **1.369** | **0** | **0%** |
+| **Sun & Moon** | **2017-02-03** | **1.927** | **121** | **6%** |
+| Sword & Shield | 2019-11-15 | 1.857 | 1.774 | 96% |
+| Scarlet & Violet | 2023-03-31 | 2.158 | 2.158 | 100% |
+| Mega Evolution | 2025-09-25 | 707 | 621 | 88% |
+
+Black & White, XY e Sun & Moon são três eras consecutivas, de 2011 a 2019, em
+que a reverse holo é das mais comuns que existem. Zero é dado faltando, não
+ausência real. Duas provas independentes:
+
+1. **POP (4%) e Trainer kits (0%) também dão zero, e ali está correto** —
+   esses produtos realmente não têm reverse holo. O método distingue um caso
+   do outro, então o zero de BW/XY/SM não é artefato da medição.
+2. **`sm3` Burning Shadows tem 116 de 117 preenchidas**, na mesma era em que
+   todas as outras coleções dão zero. Se a era não tivesse reverse holo, `sm3`
+   também não teria.
+
+Cruzamento com a pokemontcg.io reforça: numa amostra de 40 cartas que o TCGdex
+diz não ter reverse, 14 tinham dado de preço na outra base e **5 delas têm
+preço de `reverseHolofoil`** — todas Common/Uncommon de 2006 a 2015. Um Common
+de Black & White sem reverse holo não é dúvida de domínio, é erro de dado.
+
+### A consequência, e o que foi feito
+
+Num masterset, **slot faltando é pior que slot sobrando**: slot a mais custa
+uma decisão de curadoria, slot a menos faz o colecionador nunca descobrir que a
+carta existe. São ~4.400 cartas sem o slot de RF.
+
+A `variant_policy` ganhou duas capacidades em `0008_politica_obriga.sql`:
+
+| Coluna | Efeito |
+| --- | --- |
+| `obriga` | gera o slot mesmo quando a API não lista a variante |
+| `set_regex` | casa com `card_set.tcgdex_id`, para excluir coleções de promo |
+
+Com três linhas de política — uma por era quebrada — foram criados **8.828
+slots** que faltavam: Sun & Moon 3.612, XY 2.738, Black & White 2.478.
+
+Todos nascem `unknown`, com `created_by = 'inferred'` e a razão em `notes`.
+Nunca nascem `confirmed`, nem quando há scan em português: inferência é
+hipótese, não prova. A tela mostra a etiqueta **inferido** e tem filtro próprio
+para eles.
+
+Se o TCGdex preencher o dado, a limpeza é um `delete from card_variant where
+created_by = 'inferred'` seguido de um `slots --all`. E é mais um candidato a
+contribuição de volta ao projeto, que é open source.
+
+### O que ficou em aberto
+
+A era EX está em 53% — nem claramente boa nem claramente quebrada. Não entrou
+na regra porque não consigo distinguir, só pelo número, quais coleções da era
+realmente têm RF e quais são dado faltando. Fica para a curadoria.

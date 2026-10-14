@@ -28,6 +28,7 @@ CAMPOS = (
     "set_id", "set_name", "serie_name", "set_release", "number", "card_name",
     "rarity", "kind", "language", "exists_state", "has_scan", "no_catalogo",
     "notes", "source_url", "card_id", "set_count_official", "image_url", "region",
+    "created_by",
 )
 
 

@@ -157,9 +157,22 @@ porque cada regra é dado de curadoria e precisa ser auditável. Uma linha veta
 
 | Regra | Efeito |
 | --- | --- |
+| Reverse holo em coleção de promos | nega |
 | Reverse holo em set anterior a 2002-05-24 | nega |
 | Reverse holo em Ultra Rara, Full Art, Rainbow e secretas | nega |
+| Reverse holo em Black & White, XY e Sun & Moon | **obriga** |
 | Reverse holo da era EX | anota: a RF traz o nome da coleção estampado |
+
+**Obrigar existe porque a API falha.** A flag `reverse` do TCGdex está ausente
+em três eras consecutivas: Black & White 0%, XY 0% e Sun & Moon 6%, contra
+92-100% nas eras vizinhas. Não é ausência real — `sm3` Burning Shadows, da
+mesma era, tem 116 de 117 preenchidas. São 8.828 slots que faltavam no
+masterset, e num masterset slot faltando é pior que slot sobrando: o
+colecionador nunca descobre que a carta existe. Medição completa em
+`docs/achados-tcgdex.md`, seção 15.
+
+Slot obrigado nasce `unknown` com `created_by = 'inferred'` e a razão em
+`notes`, nunca `confirmed` — inferência é hipótese, não prova.
 
 **Negar não é descartar.** `kinds_da_carta` só produz variante que a API afirma
 existir, então toda negação é uma discordância entre a API e a regra — e sumir
@@ -252,7 +265,7 @@ dois.
 ## Desenvolvimento
 
 ```bash
-pytest          # 82 testes, sem rede
+pytest          # 88 testes, sem rede
 ruff check .
 ```
 

@@ -78,6 +78,8 @@ class Politica:
     priority: int
     serie: str | None = None
     region: str | None = None
+    set_regex: str | None = None
+    obriga: bool = False
     language: str | None = None
     rarity_regex: str | None = None
     min_set_release: dt.date | None = None
@@ -93,6 +95,7 @@ class Politica:
         rarity_en: str | None,
         set_release: dt.date | None,
         region: str = "west",
+        set_id: str | None = None,
     ) -> bool:
         if self.kind != kind:
             return False
@@ -102,6 +105,8 @@ class Politica:
             (
                 self.region is None or self.region == region,
                 self.serie is None or self.serie == serie,
+                self.set_regex is None
+                or bool(re.search(self.set_regex, set_id or "")),
                 self.language is None or self.language == language,
                 self.rarity_regex is None
                 or bool(re.search(self.rarity_regex, rarity_en or "")),
@@ -119,6 +124,7 @@ class Decisao:
     reason: str | None = None
     anotar: str | None = None
     politica_id: int | None = None
+    obriga: bool = False
 
 
 def decidir(
@@ -130,6 +136,7 @@ def decidir(
     rarity_en: str | None,
     set_release: dt.date | None,
     region: str = "west",
+    set_id: str | None = None,
 ) -> Decisao:
     """Mais específica primeiro: ordena por priority desc e a primeira que
     casa decide. Sem regra, libera."""
@@ -143,6 +150,7 @@ def decidir(
             rarity_en=rarity_en,
             set_release=set_release,
             region=region,
+            set_id=set_id,
         )
     ]
     if not candidatas:
@@ -153,6 +161,7 @@ def decidir(
         reason=p.reason,
         anotar=p.reason if (p.allowed and p.annotate) else None,
         politica_id=p.id,
+        obriga=p.obriga,
     )
 
 
@@ -165,6 +174,8 @@ class Slot:
     notes: str | None = None
     api_variant_id: str | None = None
     principal: bool = False
+    # Slot que a API não lista e uma regra de era mandou criar.
+    inferido: bool = False
 
 
 @dataclass
@@ -180,6 +191,7 @@ class Carta:
     image_url_pt: str | None = None
     image_url_ja: str | None = None
     region: str = "west"
+    set_tcgdex_id: str | None = None
     serie: str | None = None
     set_release: dt.date | None = None
     set_pt_release: str = "unknown"
@@ -252,6 +264,8 @@ def gerar_slots(
     source_url, então dá para auditar e reverter com um update.
     """
     kinds = kinds_da_carta(carta)
+    inferidos = _kinds_obrigados(carta, politicas, kinds)
+    kinds = kinds + inferidos
     slots: list[Slot] = []
     possiveis = IDIOMAS_POR_REGIAO.get(carta.region, ("en",))
 
@@ -270,6 +284,7 @@ def gerar_slots(
                 rarity_en=carta.rarity_en,
                 set_release=carta.set_release,
                 region=carta.region,
+                set_id=carta.set_tcgdex_id,
             )
             principal = posicao == 0
 
@@ -308,6 +323,42 @@ def gerar_slots(
                     notes=d.anotar,
                     api_variant_id=_variant_id(carta, kind),
                     principal=principal,
+                    inferido=kind in inferidos,
                 )
             )
     return slots
+
+
+def _kinds_obrigados(
+    carta: Carta, politicas: list[Politica], ja_tem: list[str]
+) -> list[str]:
+    """Tipos que uma regra de era manda criar mesmo sem a API listar.
+
+    Existe porque a flag 'reverse' do TCGdex está ausente em eras inteiras —
+    Black & White, XY e Sun & Moon dão praticamente zero, enquanto as eras
+    vizinhas passam de 90%. Ver db/migrations/0008_politica_obriga.sql para a
+    medição. Num masterset, slot faltando é pior que slot sobrando: o
+    colecionador nunca descobre que a carta existe.
+
+    Nasce 'unknown' com a razão em notes, e sai todo junto com um delete da
+    linha de política quando a fonte preencher o dado.
+    """
+    extras: list[str] = []
+    for p in politicas:
+        if not p.obriga or p.kind in ja_tem or p.kind in extras:
+            continue
+        d = decidir(
+            politicas,
+            serie=carta.serie,
+            kind=p.kind,
+            language="en",
+            rarity_en=carta.rarity_en,
+            set_release=carta.set_release,
+            region=carta.region,
+            set_id=carta.set_tcgdex_id,
+        )
+        # Só entra se a regra que ganhou a disputa for de fato a que obriga:
+        # uma negação de prioridade maior, como a de promos, tem a palavra.
+        if d.allowed and d.obriga:
+            extras.append(p.kind)
+    return extras

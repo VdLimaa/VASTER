@@ -800,8 +800,9 @@ def carregar_politicas(conn: psycopg.Connection) -> list[Politica]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            select id, serie, region, kind::text, language::text, rarity_regex,
-                   min_set_release, max_set_release, allowed, annotate, reason, priority
+            select id, serie, region, set_regex, kind::text, language::text,
+                   rarity_regex, min_set_release, max_set_release, allowed,
+                   annotate, obriga, reason, priority
             from variant_policy
             """
         )
@@ -846,6 +847,7 @@ def gerar(
             select c.id, c.tcgdex_id, c.rarity_en, c.api_variants,
                    c.api_variants_detailed, c.has_pt, c.has_ja,
                    c.image_url_pt, c.image_url_ja, c.region,
+                   st.tcgdex_id as set_tcgdex_id,
                    st.serie, st.release_date, st.pt_release
             from card c join card_set st on st.id = c.set_id
             where {filtro}
@@ -868,6 +870,7 @@ def gerar(
                 image_url_pt=r["image_url_pt"],
                 image_url_ja=r["image_url_ja"],
                 region=r["region"],
+                set_tcgdex_id=r["set_tcgdex_id"],
                 serie=r["serie"],
                 set_release=r["release_date"],
                 set_pt_release=r["pt_release"],
@@ -888,7 +891,7 @@ def gerar(
                       api_variant_id, checked_at, created_by
                     ) values (
                       %(card_id)s, %(kind)s, %(language)s, %(estado)s, %(fonte)s,
-                      %(notas)s, %(variant_id)s, %(checked)s, 'generator'
+                      %(notas)s, %(variant_id)s, %(checked)s, %(criador)s
                     )
                     on conflict (card_id, kind, language) do nothing
                     returning id
@@ -904,6 +907,7 @@ def gerar(
                         "checked": dt.datetime.now(dt.UTC)
                         if s.exists_state != "unknown"
                         else None,
+                        "criador": "inferred" if s.inferido else "generator",
                     },
                 )
                 novo = cur.fetchone()

@@ -193,6 +193,7 @@ h1 {
 .estado.wait { color: var(--wait); }
 .sem-scan { color: var(--fg-mute); font-size: 11px; font-family: var(--data); }
 .sem-scan.grave { color: var(--gem); }
+.tag.inferido { background: var(--wait-soft); color: var(--wait); border-color: transparent; }
 
 /* --- detalhe --- */
 .detalhe {
@@ -299,6 +300,10 @@ h1 {
               title="O TCGdex tem a carta nesse idioma, mas ninguém publicou foto dela.">
         Sem foto <span class="n" data-contagem="sem-foto"></span>
       </button>
+      <button class="chip" type="button" data-falta="inferido" aria-pressed="false"
+              title="Slots que a API não lista e uma regra de era criou. Precisam de confirmação.">
+        Inferidos <span class="n" data-contagem="inferido"></span>
+      </button>
       <button class="chip" type="button" data-falta="fora" aria-pressed="false"
               title="A carta nem aparece no catálogo daquele idioma. Não prova que não existe.">
         Fora do catálogo <span class="n" data-contagem="fora"></span>
@@ -385,6 +390,7 @@ function visiveis() {
     if (estado.situacao !== "todas" && s.exists_state !== estado.situacao) return false;
     if (estado.falta === "sem-foto" && !(s.no_catalogo && !s.has_scan)) return false;
     if (estado.falta === "fora" && s.no_catalogo) return false;
+    if (estado.falta === "inferido" && s.created_by !== "inferred") return false;
     return true;
   });
 }
@@ -399,6 +405,7 @@ function contar() {
   n.unknown = base.filter((s) => s.exists_state === "unknown").length;
   n["sem-foto"] = base.filter((s) => s.no_catalogo && !s.has_scan).length;
   n["fora"] = base.filter((s) => !s.no_catalogo).length;
+  n["inferido"] = base.filter((s) => s.created_by === "inferred").length;
   for (const k of new Set(SLOTS.map((s) => s.kind))) {
     n["k:" + k] = base.filter((s) => s.kind === k).length;
   }
@@ -496,6 +503,9 @@ function linha(s) {
     '<span class="num">' + esc(numero) + "</span>" +
     '<span class="meio"><span class="nome">' + esc(nomeCarta(s)) + "</span>" +
     '<span class="' + tagClasse + '">' + esc(rotuloVariante(s.kind)) + "</span>" +
+    (s.created_by === "inferred"
+      ? '<span class="tag inferido" title="A API não lista esta variante. O slot veio de uma regra de era, porque o TCGdex não preenche a flag de reverse holo nas eras Black &amp; White, XY e Sun &amp; Moon.">inferido</span>'
+      : "") +
     (falta ? '<span class="sem-scan' + (falta === "fora do catálogo" ? " grave" : "") + '">' + falta + "</span>" : "") +
     "</span>" +
     '<span class="dir">' + bandeira(s.language) +
@@ -537,6 +547,9 @@ function detalhe(s) {
   if (s.source_url) {
     dl += "<dt>prova</dt><dd><a href=" + JSON.stringify(s.source_url) +
       ' target="_blank" rel="noopener">' + esc(s.source_url.replace(/^https?:\/\//, "")) + "</a></dd>";
+  }
+  if (s.created_by === "inferred") {
+    dl += '<p class="nota"><b>Slot inferido.</b> A API do TCGdex não lista esta variante, mas ela existe nesta era — a flag de reverse holo está ausente em Black &amp; White, XY e Sun &amp; Moon, enquanto as eras vizinhas passam de 90%. Confirme antes de caçar a carta.</p>';
   }
   if (!s.no_catalogo) {
     dl += '<p class="nota">Esta carta não aparece no catálogo do TCGdex neste idioma. <b>Isso não prova que ela não existe</b> — o TCGdex não tem nenhuma carta em português antes de 2011, e o Brasil recebeu aquelas coleções. A imagem acima é o scan em inglês. Decidir este slot pede a carta na mão ou um anúncio que mostre a impressão.</p>';

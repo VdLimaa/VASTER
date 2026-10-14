@@ -28,6 +28,9 @@ select
   v.exists_state                as exists_state,
   v.source_url                  as source_url,
   v.notes                       as notes,
+  -- 'inferred': o slot veio de regra de era, não da API. Ver
+  -- db/migrations/0008_politica_obriga.sql. A tela precisa dizer isso.
+  v.created_by                  as created_by,
   case v.language
     when 'pt' then coalesce(c.image_url_pt, c.image_url)
     when 'ja' then c.image_url_ja

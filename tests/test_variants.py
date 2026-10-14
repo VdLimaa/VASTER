@@ -351,3 +351,95 @@ class TestJapones:
         slot = gerar_slots(carta, POLITICAS)[0]
         assert slot.exists_state == "confirmed"
         assert slot.source_url == "https://api.tcgdex.net/v2/ja/cards/S6K-028"
+
+
+class TestSlotObrigado:
+    """A flag 'reverse' do TCGdex está ausente em eras inteiras: Black & White,
+    XY e Sun & Moon dão praticamente zero, enquanto Diamond & Pearl, Platinum,
+    HeartGold, Sword & Shield e Scarlet & Violet passam de 90%. Num masterset,
+    slot faltando é pior que slot sobrando — o colecionador nunca descobre que
+    a carta existe."""
+
+    POLITICAS_OBRIGA = [
+        Politica(
+            id=5, kind="reverse_holo", set_regex=r"(?i)(^|-)(bwp|xyp|smp)$",
+            allowed=False, reason="Coleção de promos não tem reverse holo.",
+            priority=200,
+        ),
+        Politica(
+            id=2, kind="reverse_holo", rarity_regex=r"(?i)(ultra rare|full art)",
+            allowed=False, reason="Raridade sem RF.", priority=90,
+        ),
+        Politica(
+            id=6, serie="bw", kind="reverse_holo",
+            rarity_regex=r"(?i)^(common|uncommon|rare|rare holo)$",
+            allowed=True, obriga=True, annotate=True,
+            reason="Slot inferido pela era.", priority=70,
+        ),
+    ]
+
+    def carta(self, **extra) -> Carta:
+        base = {
+            "tcgdex_id": "bw1-1",
+            "rarity_en": "Common",
+            # A API diz que NÃO tem reverse. É justamente o dado que falta.
+            "api_variants": {"normal": True, "holo": False, "reverse": False,
+                             "firstEdition": False, "wPromo": False},
+            "serie": "bw",
+            "set_tcgdex_id": "bw1",
+            "set_release": dt.date(2011, 4, 25),
+        }
+        return Carta(**(base | extra))
+
+    def test_cria_o_slot_que_a_api_nao_lista(self):
+        slots = gerar_slots(self.carta(), self.POLITICAS_OBRIGA, idiomas=("en",))
+        rf = [s for s in slots if s.kind == "reverse_holo"]
+        assert len(rf) == 1
+        assert rf[0].inferido
+        assert rf[0].exists_state == "unknown"
+        assert "inferido" in (rf[0].notes or "").lower()
+
+    def test_slot_inferido_nunca_nasce_confirmado(self):
+        """Inferência é hipótese, não prova. Nem com scan em PT."""
+        carta = self.carta(set_pt_release="yes", has_pt=True,
+                           image_url_pt="https://x/pt.png")
+        slots = gerar_slots(carta, self.POLITICAS_OBRIGA, idiomas=("pt",))
+        por_kind = {s.kind: s for s in slots}
+        assert por_kind["regular"].exists_state == "confirmed"
+        assert por_kind["reverse_holo"].exists_state == "unknown"
+        assert por_kind["reverse_holo"].inferido
+
+    def test_promo_nao_ganha_slot_inferido(self):
+        """A negação de prioridade 200 vence a regra que obriga."""
+        carta = self.carta(tcgdex_id="bwp-BW01", set_tcgdex_id="bwp")
+        slots = gerar_slots(carta, self.POLITICAS_OBRIGA, idiomas=("en",))
+        assert not any(s.kind == "reverse_holo" for s in slots)
+
+    def test_raridade_sem_rf_nao_ganha_slot_inferido(self):
+        carta = self.carta(rarity_en="Ultra Rare")
+        slots = gerar_slots(carta, self.POLITICAS_OBRIGA, idiomas=("en",))
+        assert not any(s.kind == "reverse_holo" for s in slots)
+
+    def test_era_de_dado_bom_nao_infere_nada(self):
+        """Em Sword & Shield a API acerta; a regra não se aplica e o slot que
+        existe vem da API, não da inferência."""
+        carta = self.carta(
+            tcgdex_id="swsh7-67", serie="swsh", set_tcgdex_id="swsh7",
+            set_release=dt.date(2021, 8, 27),
+            api_variants={"normal": True, "holo": False, "reverse": True,
+                          "firstEdition": False, "wPromo": False},
+        )
+        slots = gerar_slots(carta, self.POLITICAS_OBRIGA, idiomas=("en",))
+        rf = [s for s in slots if s.kind == "reverse_holo"]
+        assert len(rf) == 1
+        assert not rf[0].inferido
+
+    def test_nao_duplica_quando_a_api_ja_lista(self):
+        carta = self.carta(
+            api_variants={"normal": True, "holo": False, "reverse": True,
+                          "firstEdition": False, "wPromo": False}
+        )
+        slots = gerar_slots(carta, self.POLITICAS_OBRIGA, idiomas=("en", "pt"))
+        chaves = [(s.kind, s.language) for s in slots]
+        assert len(chaves) == len(set(chaves))
+        assert not any(s.inferido for s in slots)
