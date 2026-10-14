@@ -32,6 +32,11 @@ from .variants import Carta, Politica, gerar_slots
 # para não mentir sobre o que o TCGdex tem, mas sai do masterset físico.
 SERIES_DIGITAIS = frozenset({"tcgp"})
 
+# Quantas cartas por lote no passo 'details'. O lote existe para gravar e
+# commitar incrementalmente: o catálogo japonês tem 12.781 cartas e perder
+# seis minutos de coleta por uma falha no fim seria burrice.
+LOTE_DETALHES = 400
+
 
 def _num_sort(numero: str) -> int | None:
     m = re.search(r"\d+", numero or "")
@@ -78,15 +83,16 @@ def gravar_especies(conn: psycopg.Connection, especies: list[Especie]) -> Result
         for e in especies:
             cur.execute(
                 """
-                insert into species (dex_number, slug, name_en, name_pt)
-                values (%s, %s, %s, %s)
+                insert into species (dex_number, slug, name_en, name_pt, name_ja)
+                values (%s, %s, %s, %s, %s)
                 on conflict (dex_number) do update
                   set slug = excluded.slug,
                       name_en = excluded.name_en,
-                      name_pt = excluded.name_pt
+                      name_pt = excluded.name_pt,
+                      name_ja = coalesce(excluded.name_ja, species.name_ja)
                 returning (xmax = 0) as novo
                 """,
-                (e.dex_number, e.slug, e.name_en, e.name_pt),
+                (e.dex_number, e.slug, e.name_en, e.name_pt, e.name_ja),
             )
             row = cur.fetchone()
             if row and row["novo"]:
@@ -99,7 +105,7 @@ def gravar_especies(conn: psycopg.Connection, especies: list[Especie]) -> Result
 
 def carregar_indice(conn: psycopg.Connection) -> IndiceEspecies:
     with conn.cursor() as cur:
-        cur.execute("select dex_number, slug, name_en, name_pt from species")
+        cur.execute("select dex_number, slug, name_en, name_pt, name_ja from species")
         return IndiceEspecies([Especie(**r) for r in cur.fetchall()])
 
 
@@ -403,17 +409,38 @@ async def ingerir_detalhes(
     def lang_principal(reg: str) -> str:
         return cfg.lang_ja if reg == "jp" else cfg.lang_en
 
+    # Em lotes, gravando e commitando a cada um. Com 12.781 cartas japonesas
+    # um gather único seguraria tudo na memória e perderia o trabalho inteiro
+    # numa falha no meio; assim o que já entrou fica, e details_at faz a
+    # próxima execução continuar de onde parou.
     async with TCGdex(cfg.tcgdex_base, concurrency=cfg.concurrency, timeout=cfg.timeout) as api:
-        principais = await asyncio.gather(
-            *(api.card(lang_principal(reg), cid) for cid, reg in alvos)
-        )
-        # O overlay em português só existe no catálogo do oeste.
-        pede_pt = [
-            cid
-            for (cid, reg), d in zip(alvos, principais, strict=True)
-            if d and reg == "west"
-        ]
-        pt = await asyncio.gather(*(api.card(cfg.lang_pt, cid) for cid in pede_pt))
+        for inicio in range(0, len(alvos), LOTE_DETALHES):
+            lote = alvos[inicio : inicio + LOTE_DETALHES]
+            await _gravar_lote_detalhes(conn, cfg, api, lote, lang_principal, res)
+            if len(alvos) > LOTE_DETALHES:
+                feitos = min(inicio + LOTE_DETALHES, len(alvos))
+                print(f"    {feitos}/{len(alvos)} cartas", flush=True)
+    return res
+
+
+async def _gravar_lote_detalhes(
+    conn: psycopg.Connection,
+    cfg: Config,
+    api: TCGdex,
+    alvos: list[tuple[str, str]],
+    lang_principal,
+    res: Resultado,
+) -> None:
+    principais = await asyncio.gather(
+        *(api.card(lang_principal(reg), cid) for cid, reg in alvos)
+    )
+    # O overlay em português só existe no catálogo do oeste.
+    pede_pt = [
+        cid
+        for (cid, reg), d in zip(alvos, principais, strict=True)
+        if d and reg == "west"
+    ]
+    pt = await asyncio.gather(*(api.card(cfg.lang_pt, cid) for cid in pede_pt))
     pt_por_id = {cid: d for cid, d in zip(pede_pt, pt, strict=True) if d}
 
     with conn.cursor() as cur:
@@ -463,6 +490,69 @@ async def ingerir_detalhes(
             )
             res.atualizados += cur.rowcount
     conn.commit()
+
+
+async def ingerir_detalhes_bulk(conn: psycopg.Connection, cfg: Config) -> Resultado:
+    """Detalhes de TODO o catálogo ocidental em uma requisição GraphQL.
+
+    É o que torna o produto viável para as 1.025 espécies: o caminho REST
+    custa uma requisição por carta, ~23.700 só no oeste. O GraphQL devolve
+    id, variants, rarity, category, dexId e illustrator de todas elas de uma
+    vez, em menos de um segundo.
+
+    Duas coisas o GraphQL NÃO dá, e por isso o caminho carta a carta continua
+    existindo:
+      * variants_detailed, que traz o variantId e o preço por variante e é a
+        fonte da F3;
+      * rarity_pt, que só vem do detalhe em português.
+    O catálogo japonês também fica de fora: o GraphQL não tem filtro de idioma
+    e id japonês volta vazio.
+    """
+    res = Resultado("details[west/graphql]")
+    async with TCGdex(cfg.tcgdex_base, concurrency=cfg.concurrency, timeout=cfg.timeout) as api:
+        cartas = await api.todas_cartas_detalhadas()
+    if not cartas:
+        res.observacoes.append("GraphQL não devolveu nada")
+        return res
+
+    linhas = [
+        (
+            c.get("rarity"),
+            c.get("category"),
+            c.get("illustrator"),
+            psycopg.types.json.Jsonb(c.get("variants") or {}),
+            c.get("dexId") or None,
+            c["id"],
+        )
+        for c in cartas
+        if c.get("id")
+    ]
+    with conn.cursor() as cur:
+        cur.executemany(
+            """
+            update card set
+              rarity_en = %s,
+              category_en = %s,
+              illustrator = coalesce(%s, card.illustrator),
+              api_variants = %s,
+              api_dex_id = %s,
+              details_at = now()
+            where tcgdex_id = %s and region = 'west'
+            """,
+            linhas,
+        )
+        res.atualizados = cur.rowcount if cur.rowcount and cur.rowcount > 0 else len(linhas)
+    conn.commit()
+
+    sem_dex = sum(1 for c in cartas if not c.get("dexId"))
+    res.observacoes.append(
+        f"{len(cartas)} cartas em 1 requisição GraphQL; {sem_dex} sem dexId "
+        f"(Trainer, Energy e algumas antigas) caem no casamento por nome"
+    )
+    res.observacoes.append(
+        "variants_detailed e rarity_pt não vêm por aqui: para o preço da F3, "
+        "rode 'details' no caminho REST sobre o recorte que interessar"
+    )
     return res
 
 
@@ -541,7 +631,8 @@ def ligar_especies(
         if species_slug:
             cur.execute(
                 """
-                select c.id, c.tcgdex_id, c.name_en, c.category_en, c.api_dex_id
+                select c.id, c.tcgdex_id, c.name_en, c.name_ja, c.category_en,
+                       c.api_dex_id
                 from card c
                 where c.details_at is not null
                   and c.api_dex_id && (
@@ -553,7 +644,7 @@ def ligar_especies(
         elif todas:
             cur.execute(
                 """
-                select id, tcgdex_id, name_en, category_en, api_dex_id
+                select id, tcgdex_id, name_en, name_ja, category_en, api_dex_id
                 from card where details_at is not null
                 """
             )
@@ -572,12 +663,14 @@ def ligar_especies(
             dex = list(c["api_dex_id"] or [])
             resolvedor = "dex_id"
             if not dex:
-                achados = indice.casar(c["name_en"] or "")
+                # Carta japonesa não tem name_en: o nome dela está em name_ja.
+                achados = indice.casar(c["name_en"] or c["name_ja"] or "")
                 dex = [e.dex_number for e in achados]
                 resolvedor = "name_match"
             if not dex:
                 res.ignorados += 1
-                res.observacoes.append(f"sem espécie: {c['tcgdex_id']} {c['name_en']!r}")
+                nome = c["name_en"] or c["name_ja"]
+                res.observacoes.append(f"sem espécie: {c['tcgdex_id']} {nome!r}")
                 continue
             for d in dex:
                 sid = id_por_dex.get(d)

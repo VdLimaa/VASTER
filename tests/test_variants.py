@@ -201,8 +201,14 @@ class TestGerarSlots:
             set_pt_release="yes",
         )
         slots = gerar_slots(carta, POLITICAS)
-        assert not any(s.kind == "reverse_holo" for s in slots)
-        assert len(carta.vetos) == 2  # en e pt
+        rf = [s for s in slots if s.kind == "reverse_holo"]
+        # Não some: vira 'unlikely' com a razão, porque a API afirmava que
+        # existia e a discordância é exatamente o que alguém precisa ver.
+        assert len(rf) == 2  # en e pt
+        assert all(s.exists_state == "unlikely" for s in rf)
+        assert all("Legendary Collection" in (s.notes or "") for s in rf)
+        assert all(s.source_url is None for s in rf)
+        assert len(carta.vetos) == 2
         assert "Legendary Collection" in carta.vetos[0]
 
     def test_auto_confirma_so_o_slot_principal_em_pt(self, carta_sableye_swsh7):
@@ -299,7 +305,8 @@ class TestJapones:
                           "firstEdition": False, "wPromo": False}
         )
         slots = gerar_slots(carta, POLITICAS)
-        assert not any(s.kind == "reverse_holo" for s in slots)
+        rf = [s for s in slots if s.kind == "reverse_holo"]
+        assert len(rf) == 1 and rf[0].exists_state == "unlikely"
         assert any("japonês" in v for v in carta.vetos)
 
     def test_regra_do_oeste_nao_vaza_para_o_japao(self):
@@ -312,6 +319,18 @@ class TestJapones:
         )
         assert not d.allowed
         assert "japonês" in d.reason
+
+    def test_negacao_da_politica_nao_vira_confirmacao(self):
+        """Slot negado nasce 'unlikely' mesmo com auto-confirmação ligada."""
+        carta = self.carta_jp(
+            has_ja=True,
+            image_url_ja="https://x/1.png",
+            api_variants={"normal": True, "holo": False, "reverse": True,
+                          "firstEdition": False, "wPromo": False},
+        )
+        estados = {s.kind: s.exists_state for s in gerar_slots(carta, POLITICAS)}
+        assert estados["regular"] == "confirmed"
+        assert estados["reverse_holo"] == "unlikely"
 
     def test_carta_japonesa_nasce_confirmada_com_o_scan(self):
         """Estar no catálogo japonês já é a evidência: a carta é japonesa."""

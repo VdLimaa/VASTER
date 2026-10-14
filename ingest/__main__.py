@@ -31,7 +31,14 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("migrate", help="aplica as migrations pendentes")
-    sub.add_parser("species", help="popula species a partir da PokéAPI")
+    sp = sub.add_parser("species", help="popula species a partir da PokéAPI")
+    sp.add_argument(
+        "--sem-ja",
+        action="store_false",
+        dest="com_japones",
+        help="pula os nomes japoneses (1.025 requisições). Sem eles, 434 cartas "
+        "japonesas sem dexId ficam fora de todo masterset",
+    )
     st = sub.add_parser("sets", help="ingere sets e o overlay de nome em PT")
     _regiao(st)
     cd = sub.add_parser("cards", help="ingere todas as cartas (2 requisições)")
@@ -42,6 +49,12 @@ def main(argv: list[str] | None = None) -> int:
     d = sub.add_parser("details", help="busca variants/rarity/dexId por carta")
     _escopo(d)
     _regiao(d)
+    d.add_argument(
+        "--bulk",
+        action="store_true",
+        help="usa o GraphQL para o catálogo ocidental inteiro em 1 requisição. "
+        "Não traz variants_detailed nem rarity_pt, e não cobre o japonês",
+    )
     d.add_argument("--refazer", action="store_true", help="rebusca o que já tem detalhe")
     d.add_argument("--limite", type=int, help="para no N-ésimo (útil para testar)")
 
@@ -94,7 +107,14 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.cmd == "species":
-            especies = asyncio.run(listar_especies(cfg.pokeapi_base, timeout=cfg.timeout))
+            especies = asyncio.run(
+                listar_especies(
+                    cfg.pokeapi_base,
+                    timeout=cfg.timeout,
+                    com_japones=args.com_japones,
+                    concorrencia=cfg.concurrency,
+                )
+            )
             print(pipeline.gravar_especies(conn, especies))
             return 0
 
@@ -109,6 +129,19 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.cmd == "details":
+            if args.bulk:
+                if args.region in ("west", "all"):
+                    print(asyncio.run(pipeline.ingerir_detalhes_bulk(conn, cfg)))
+                if args.region in ("jp", "all"):
+                    print(
+                        asyncio.run(
+                            pipeline.ingerir_detalhes(
+                                conn, cfg, todas=True, region="jp",
+                                refazer=args.refazer, limite=args.limite,
+                            )
+                        )
+                    )
+                return 0
             print(
                 asyncio.run(
                     pipeline.ingerir_detalhes(

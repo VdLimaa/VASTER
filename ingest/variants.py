@@ -8,10 +8,19 @@ impressões daquela carta existem. A raridade não cria slot: ela renomeia o
 slot base. Uma Full Art tem variants.normal = true e é a própria Full Art,
 então gerar 'regular' + 'full_art' inventaria uma carta que não existe.
 
-Sobre a tabela de política: ela veta (allowed=false) ou anota
-(annotate=true). Vetar é o caso da reverse holo antes de Legendary
+Sobre a tabela de política: ela nega (allowed=false) ou anota
+(annotate=true). Negar é o caso da reverse holo antes de Legendary
 Collection; anotar é o caso da RF da era EX, que traz o nome da coleção
 estampado e precisa de conferência visual antes de virar 'confirmed'.
+
+Negar NÃO descarta o slot: cria com exists_state='unlikely' e a razão em
+notes. O motivo é que kinds_da_carta só produz variante que a API afirma
+existir, então toda negação é uma DISCORDÂNCIA entre a API e a regra — e
+sumir com ela em silêncio esconde justamente o caso que alguém precisa
+olhar. 'unlikely' é o estado que o documento reserva para evidência fraca,
+e é o único que não exige source_url. No catálogo ocidental inteiro isso dá
+22 slots: 18 de reverse holo em set anterior a 2002 e 4 em raridade que não
+tem RF.
 """
 
 from __future__ import annotations
@@ -262,11 +271,26 @@ def gerar_slots(
                 set_release=carta.set_release,
                 region=carta.region,
             )
+            principal = posicao == 0
+
             if not d.allowed:
                 carta.vetos.append(f"{kind}/{idioma}: {d.reason}")
+                slots.append(
+                    Slot(
+                        kind=kind,
+                        language=idioma,
+                        exists_state="unlikely",
+                        notes=(
+                            f"A API do TCGdex diz que esta variante existe, mas "
+                            f"a política discorda: {d.reason} Confira antes de "
+                            f"caçar a carta."
+                        ),
+                        api_variant_id=_variant_id(carta, kind),
+                        principal=principal,
+                    )
+                )
                 continue
 
-            principal = posicao == 0
             estado, fonte = "unknown", None
             if auto_confirmar and principal and carta.tem_catalogo(idioma):
                 estado = "confirmed"

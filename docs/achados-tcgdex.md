@@ -4,9 +4,13 @@ Medido em 2026-10-13 contra a API ao vivo, durante a implementação da F0.
 Cada número aqui saiu de uma requisição, não de leitura de documentação.
 Reproduzir: `python -m ingest coverage` depois de `sets` e `cards`.
 
-Este documento existe porque seis das premissas de
+Este documento existe porque sete das premissas de
 [arquitetura.md](arquitetura.md) não sobreviveram ao contato com a API. Nenhuma
-delas invalida o projeto; duas melhoram bastante, e a sexta muda o modelo.
+delas invalida o projeto; duas melhoram bastante, uma muda o modelo e a sétima
+é o que torna o catálogo inteiro viável.
+
+A seção 11 registra um erro meu, não da API: uma regra que escrevi a partir de
+uma amostra pequena demais e que o catálogo completo refutou.
 
 ## 1. `pt-br` não é o português do card game
 
@@ -292,3 +296,138 @@ foto.
 
 A consulta do masterset devolve os dois sinais separados, `has_scan` e
 `no_catalogo`, e a tela mostra cada um com a sua etiqueta.
+
+## 10. O GraphQL entrega o catálogo inteiro em uma requisição
+
+O passo `details` é o caro: `variants` só existe no detalhe da carta, uma
+requisição por carta. Para as 1.025 espécies isso seria ~37.000 requisições só
+no oeste, uns 23 minutos.
+
+O TCGdex tem um endpoint GraphQL em `POST /v2/graphql`. Esta consulta devolve
+**todas as 23.736 cartas ocidentais com `variants`, `rarity`, `category`,
+`dexId` e `illustrator`**, em 4,7 MB e 0,75 s:
+
+```graphql
+{ cards { id localId name rarity category dexId illustrator image
+          variants { normal reverse holo firstEdition wPromo } } }
+```
+
+Medido: 23.736 cartas, 23.736 com `variants`, 19.926 com `dexId`, 23.017 com
+`illustrator`. É o comando `details --all --bulk`, e levou 5 segundos contra os
+23 minutos do caminho REST.
+
+Três limites, confirmados por introspecção do schema:
+
+1. **Só serve o inglês.** `CardsFilters` tem 17 campos — `category`, `dexId`,
+   `rarity`, `illustrator` e outros — e **nenhum de idioma**. `Accept-Language`
+   é ignorado, `/v2/ja/graphql` é 404, e id japonês (`S6K-028`) volta vazio. O
+   catálogo japonês continua custando uma requisição por carta: 12.781, uns 6
+   minutos.
+2. **Não traz `variants_detailed`**, que é onde está o `variantId` e o preço
+   por variante. Para a F3 o caminho REST continua necessário, mas aí já dá
+   para escopar no recorte que interessa.
+3. **Não traz `rarity_pt`**, que só vem do detalhe em português.
+
+`{ cards { id } }` também devolve as 23.736 sem paginar — o argumento
+`pagination` existe no schema mas rejeita o formato `{page, itemsPerPage}`.
+
+## 11. Correção: minha regra de reverse holo japonês estava errada
+
+Registrado porque o erro é instrutivo.
+
+A seção 8 afirmou, com base em 54 cartas amostradas em três coleções (`S6K`,
+`SM7b`, `PCG1`), que o card game japonês não imprime reverse holo. Ao rodar o
+catálogo completo, **1.008 cartas japonesas têm a flag `reverse`** — e as 11
+coleções onde isso acontece são todas high-class pack ou coleção especial:
+
+| Coleção | Nome | Lançamento | Cartas com reverse |
+| --- | --- | --- | ---: |
+| `S8b` | VMAXクライマックス | 2021-12-03 | 110 |
+| `S9a` | バトルリージョン | 2022-02-25 | 45 |
+| `S10a` | ダークファンタズマ | 2022-05-13 | 49 |
+| `S11a` | 白熱のアルカナ | 2022-09-02 | 46 |
+| `S12a` | VSTARユニバース | 2022-12-02 | 89 |
+| `SV2a` | ポケモンカード151 | 2023-06-16 | 153 |
+| `SV4a` | レイジングサーフ | 2023-12-01 | 93 |
+| `SV8a` | テラスタルフェスex | 2024-12-06 | 145 |
+| `SV11B` / `SV11W` | ブラックボルト / ホワイトフレア | 2025-06-06 | 160 |
+| `M2a` | MEGAドリームex | 2025-11-28 | 118 |
+
+Essas coleções trazem versão espelhada desde VMAX Climax, em 2021. A amostra
+pegou só expansões regulares, onde de fato não há. A API acerta carta a carta;
+a regra é que generalizava.
+
+A regra saiu em `0007_japones_correcoes.sql`, e os 1.008 slots que ela havia
+marcado voltaram para `unknown`. O que fica: **regra por era só entra quando a
+amostra cobre a variação que ela pretende descrever.** As outras duas regras
+sobreviveram porque a API concorda com elas em 23.734 de 23.736 cartas.
+
+## 12. Negar um slot não é descartá-lo
+
+`kinds_da_carta` só produz variante que a API afirma existir. Então toda
+negação da política é uma **discordância** entre a API e a regra — e sumir com
+ela em silêncio esconde justamente o caso que alguém precisa olhar.
+
+Slot negado passou a nascer com `exists_state = 'unlikely'` e a razão em
+`notes`. É o estado que o documento de arquitetura reserva para evidência
+fraca, e o único que a constraint deixa existir sem `source_url`.
+
+No catálogo inteiro são 22 slots: 18 de reverse holo em set anterior a 2002
+(promos `basep` e Southern Islands) e 4 em raridade que não tem RF (duas cartas
+da Trainer Gallery de Brilliant Stars).
+
+## 13. Nome japonês da espécie, e por que token não serve
+
+434 cartas japonesas de Pokémon não têm `dexId`. Sem nome japonês na tabela
+`species`, nenhuma delas entrava em masterset nenhum.
+
+A PokéAPI tem o nome japonês no detalhe de cada espécie (`names[].language.name
+== "ja"`), uma requisição por espécie: 1.025 ao todo, 17 segundos. Virou
+`species.name_ja`.
+
+Duas armadilhas no casamento:
+
+1. **NFKD destrói o japonês.** A normalização do latino faz NFKD e remove os
+   caracteres combining; em japonês o dakuten É um combining, então
+   `バンギラス` (Tyranitar) vira `ハンキラス` e não casa com nada. O japonês usa
+   NFKC, que preserva o dakuten e ainda normaliza katakana de meia largura.
+2. **Japonês não separa palavra com espaço.** `メガヤミラミ&バンギラスGX` é um
+   token só até o `&`, então casar por token não acha `ヤミラミ` lá dentro. A
+   varredura é por caractere, sempre pegando o nome mais longo que casa naquela
+   posição — o mesmo algoritmo do latino, num alfabeto sem espaços. É isso que
+   faz `ミュウツー` (Mewtwo) ganhar de `ミュウ` (Mew), exatamente como
+   'Mewtwo' ganha de 'Mew'.
+
+Resultado: 433 das 434 resolvidas. A que sobra é `E4-070` 埋もれた化石
+(Buried Fossil), carta de fóssil que legitimamente não nomeia espécie nenhuma.
+
+## 14. O catálogo completo, medido
+
+| | |
+| --- | ---: |
+| Coleções | 404 |
+| Cartas | 36.517 |
+| Espécies na PokéAPI | 1.025 |
+| **Espécies com pelo menos uma carta** | **1.025** |
+| Vínculos carta↔espécie | 30.672 |
+| Slots de variante | 80.464 |
+
+Resolução de espécie: 30.053 vínculos por `dexId`, 619 por casamento de nome.
+Zero cartas Trainer ou Energy ganharam espécie — o corte por categoria segurou
+em 36.517 cartas.
+
+Slots por espécie: mínimo 6, mediana 55, média 66, máximo 635 (Pikachu).
+
+| Idioma | Confirmados | A confirmar | Improváveis |
+| --- | ---: | ---: | ---: |
+| `pt` | 13.907 | 19.348 | 11 |
+| `en` | 0 | 33.255 | 11 |
+| `ja` | 12.781 | 1.151 | 0 |
+
+Os confirmados são promoção em lote: o TCGdex tem a carta naquele idioma. O
+inglês fica todo em `unknown` porque não há nada a provar — a carta do catálogo
+ocidental É a inglesa — e isso é uma decisão a revisitar: faria sentido o slot
+principal em inglês nascer confirmado também.
+
+Tempo total, do banco vazio ao catálogo completo: cerca de **7 minutos**, dos
+quais 6 são as 12.781 requisições do catálogo japonês.

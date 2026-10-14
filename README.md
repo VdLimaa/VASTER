@@ -8,8 +8,9 @@ O que a API do TCGdex realmente entrega, medido:
 [docs/achados-tcgdex.md](docs/achados-tcgdex.md) — leia antes de mexer na
 ingestão.
 
-**Estado: F0 fechada.** Schema aplicado, ingestão funcionando contra a API ao
-vivo e o gate do Sableye passando com dado real. A F1 (admin de curadoria) é o
+**Estado: F0 fechada, catálogo completo.** 404 coleções, 36.517 cartas,
+**as 1.025 espécies com masterset nos três idiomas**, 80.464 slots. Do banco
+vazio ao catálogo inteiro em cerca de 7 minutos. A F1 (admin de curadoria) é o
 próximo passo.
 
 ## Subir
@@ -24,22 +25,37 @@ uv pip install -e '.[dev]'
 python -m ingest migrate
 ```
 
-## Fechar o gate do Sableye
+## Montar o catálogo inteiro
 
 ```bash
-python -m ingest species                    # 1.025 espécies da PokéAPI
-python -m ingest sets                       # 404 coleções (220 oeste + 184 Japão)
-python -m ingest cards                      # 36.517 cartas em 3 requisições
-python -m ingest details --species sableye  # variants e dexId, 56 requisições
-python -m ingest links   --species sableye  # preenche card_species
-python -m ingest slots   --species sableye  # gera os 115 slots
-python -m ingest gate    --species sableye  # verifica o gate da F0
+python -m ingest species             # 1.025 espécies + nome japonês (~17 s)
+python -m ingest sets                # 404 coleções (220 oeste + 184 Japão)
+python -m ingest cards               # 36.517 cartas em 3 requisições
+python -m ingest details --all --bulk   # variants de tudo (~6 min)
+python -m ingest links --all            # 30.672 vínculos carta↔espécie
+python -m ingest slots --all            # 80.464 slots
 ```
 
-`sets`, `cards`, `details` e `slots` aceitam `--region west|jp|all`, e o padrão
-é `all`. Para ficar só no catálogo ocidental, `--region west`.
+`details --all --bulk` é o passo que torna isso viável. O catálogo ocidental
+inteiro sai de **uma requisição GraphQL** em 5 segundos, no lugar de ~37.000
+requisições REST. O japonês não tem equivalente — o GraphQL do TCGdex não tem
+filtro de idioma — e custa 12.781 requisições, uns 6 minutos, gravadas em lotes
+de 400 para a execução ser retomável.
 
-O `gate` sai com código 1 se falhar, então serve em CI. Resultado esperado: 27
+Depois disso, qualquer espécie responde:
+
+```bash
+python -m ingest gate      --species pikachu    # 635 slots em 139 coleções
+python -m ingest masterset --species charizard --lang ja
+python web/prototipo/gerar.py --species mewtwo
+```
+
+`sets`, `cards`, `details` e `slots` aceitam `--region west|jp|all`, padrão
+`all`. `species` aceita `--sem-ja` para pular as 1.025 requisições dos nomes
+japoneses — mas sem eles 434 cartas japonesas sem `dexId` ficam fora de todo
+masterset.
+
+O `gate` sai com código 1 se falhar, então serve em CI. Para Sableye: 27
 coleções físicas do oeste, 13 japonesas, 0 duplicatas e 8 cartas
 `Mega Sableye & Tyranitar GX` — 4 ocidentais e 4 japonesas — ligadas a
 `sableye` e `tyranitar`.
@@ -64,9 +80,10 @@ do slot, não do app: o mesmo colecionador mistura PT e EN no mesmo fichário.
 | Comando | O que faz | Custo |
 | --- | --- | --- |
 | `migrate` | aplica `db/migrations/*.sql` em ordem | — |
-| `species` | popula `species` da PokéAPI | 1 requisição |
-| `sets` | sets, séries, datas e overlay de nome em PT | ~245 requisições |
-| `cards` | todas as cartas dos dois idiomas | 2 requisições |
+| `species` | popula `species` da PokéAPI, com nome japonês | 1.026 requisições |
+| `sets` | sets, séries, datas e overlay de nome em PT | ~430 requisições |
+| `cards` | todas as cartas dos três idiomas | 3 requisições |
+| `details --bulk` | o mesmo via GraphQL, só no oeste | **1 requisição** |
 | `details` | `variants`, `rarity`, `category`, `dexId` | 1 por carta |
 | `links` | preenche `card_species` a partir do `dexId` | — |
 | `slots` | gera `card_variant` aplicando a política por era | — |
@@ -110,14 +127,27 @@ porque cada regra é dado de curadoria e precisa ser auditável. Uma linha veta
 
 | Regra | Efeito |
 | --- | --- |
-| Reverse holo em set anterior a 2002-05-24 | veta |
-| Reverse holo em Ultra Rara, Full Art, Rainbow e secretas | veta |
+| Reverse holo em set anterior a 2002-05-24 | nega |
+| Reverse holo em Ultra Rara, Full Art, Rainbow e secretas | nega |
 | Reverse holo da era EX | anota: a RF traz o nome da coleção estampado |
+
+**Negar não é descartar.** `kinds_da_carta` só produz variante que a API afirma
+existir, então toda negação é uma discordância entre a API e a regra — e sumir
+com ela em silêncio esconde justamente o caso que alguém precisa olhar. O slot
+negado nasce `unlikely` com a razão em `notes`. No catálogo inteiro são 22.
+
+Uma regra já foi removida por estar errada: eu afirmei que o japonês não tem
+reverse holo a partir de uma amostra de 54 cartas, e o catálogo completo mostrou
+1.008 cartas japonesas com reverse, todas em high-class packs. Está em
+`docs/achados-tcgdex.md`, seção 11. A lição virou critério: regra por era só
+entra quando a amostra cobre a variação que ela pretende descrever.
 
 ## Japonês é outro catálogo
 
 Não é tradução. São 184 coleções com ids próprios (`PMCG1`, `VS1`, `S6K`), e
-id de carta inglesa dá 404 em `ja`. Quatro ids colidem entre os dois catálogos
+id de carta inglesa dá 404 em `ja`. O nome da carta também é japonês, e para
+casar espécie por nome o `species.name_ja` é obrigatório: sem ele, 434 cartas
+japonesas sem `dexId` ficam fora de todo masterset. Quatro ids colidem entre os dois catálogos
 sendo coleções **diferentes** — `neo1` é *Neo Genesis* em inglês e
 金、銀、新世界へ... em japonês — então a chave de `card_set` e de `card` é
 `(tcgdex_id, region)`.
@@ -192,7 +222,7 @@ dois.
 ## Desenvolvimento
 
 ```bash
-pytest          # 81 testes, sem rede
+pytest          # 82 testes, sem rede
 ruff check .
 ```
 

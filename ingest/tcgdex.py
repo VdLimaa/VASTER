@@ -10,6 +10,13 @@ docs/achados-tcgdex.md:
 * /{lang}/cards                todas as cartas em resumo (1 request, ~2,4 MB em en)
 * /{lang}/cards?dexId=N        cartas de uma espécie, Tag Team incluída
 * /{lang}/series e /series/{id} séries com releaseDate e seus sets
+* /graphql                     TODAS as cartas com variants, rarity, category e
+                               dexId em UMA requisição (4,7 MB, 0,75 s)
+
+O GraphQL é o atalho que torna o catálogo inteiro viável: ele dispensa as
+~37.000 requisições de detalhe do oeste. Mas serve SÓ o inglês — não tem filtro
+de idioma, e id de carta japonesa volta vazio. O catálogo japonês continua
+precisando de uma requisição por carta.
 
 A lista de cartas dentro de um set NÃO traz variants, então gerar slot exige
 um GET por carta. É por isso que 'cards' e 'details' são comandos separados:
@@ -40,6 +47,8 @@ class TCGdex:
     ) -> None:
         self.base = base.rstrip("/")
         self.max_retries = max_retries
+        # O GraphQL devolve 4,7 MB de uma vez; o timeout padrão não cobre.
+        self._timeout_longo = max(timeout * 6, 180.0)
         self._sem = asyncio.Semaphore(concurrency)
         self._own_client = client is None
         self._client = client or httpx.AsyncClient(
@@ -111,6 +120,53 @@ class TCGdex:
         """Resumo de todas as cartas do idioma em uma requisição.
         É assim que se mede a cobertura PT sem varrer set por set."""
         return await self._get(f"{lang}/cards") or []
+
+    async def graphql(self, query: str) -> dict:
+        """POST no /graphql. Só serve o catálogo inglês."""
+        url = f"{self.base}/graphql"
+        atraso = 1.0
+        ultimo: Exception | None = None
+        for tentativa in range(self.max_retries):
+            async with self._sem:
+                try:
+                    r = await self._client.post(
+                        url, json={"query": query}, timeout=self._timeout_longo
+                    )
+                except (httpx.TransportError, httpx.HTTPError) as exc:
+                    ultimo = exc
+                else:
+                    if r.status_code not in RETRY_STATUS:
+                        r.raise_for_status()
+                        corpo = r.json()
+                        if corpo.get("errors"):
+                            raise RuntimeError(f"GraphQL: {corpo['errors']}")
+                        return corpo.get("data") or {}
+                    ultimo = httpx.HTTPStatusError(
+                        f"{r.status_code} em {url}", request=r.request, response=r
+                    )
+            if tentativa < self.max_retries - 1:
+                await asyncio.sleep(atraso)
+                atraso *= 2
+        assert ultimo is not None
+        raise ultimo
+
+    async def todas_cartas_detalhadas(self) -> list[dict]:
+        """Catálogo inglês inteiro com variants, em uma requisição.
+
+        Substitui ~23.700 chamadas a /en/cards/{id}. Não existe equivalente
+        para o japonês: o GraphQL não tem filtro de idioma.
+        """
+        dados = await self.graphql(
+            """
+            {
+              cards {
+                id localId name rarity category dexId illustrator image
+                variants { normal reverse holo firstEdition wPromo }
+              }
+            }
+            """
+        )
+        return dados.get("cards") or []
 
     async def cards_by_dex(self, lang: str, dex_number: int) -> list[dict]:
         """Cartas de uma espécie. Pega 'Mega Sableye & Tyranitar GX' em
