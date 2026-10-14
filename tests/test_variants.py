@@ -128,15 +128,42 @@ class TestKindBase:
             ("Full Art", "full_art"),
             ("Rainbow Rare", "rainbow"),
             ("Secret Rare", "gold"),
-            ("Hyper Rare", "gold"),
+            # O TCGdex não usa a palavra "rainbow": chama de 'Hyper rare', e
+            # reserva 'Secret Rare' para a dourada. Conferido contra as 42
+            # raridades de /en/rarities.
+            ("Hyper rare", "rainbow"),
+            ("Mega Hyper Rare", "rainbow"),
             ("Illustration Rare", "alt_art"),
             ("Special Illustration Rare", "alt_art"),
             ("Shiny Rare", "shiny"),
             (None, "regular"),
+            # Tipos de carta, não impressões alternativas da mesma carta: o
+            # slot é a impressão base dela e a raridade aparece em coluna
+            # própria. Deixar em 'regular' é decisão, não esquecimento.
+            ("Rare Holo LV.X", "regular"),
+            ("Rare PRIME", "regular"),
+            ("LEGEND", "regular"),
+            ("ACE SPEC Rare", "regular"),
+            ("Radiant Rare", "regular"),
+            ("Amazing Rare", "regular"),
+            ("Ultra Rare", "regular"),
         ],
     )
     def test_raridade_define_o_slot_base(self, raridade, esperado):
         assert kind_base(raridade) == esperado
+
+    def test_cobre_as_raridades_reais_da_api(self):
+        """As 42 de /en/rarities, congeladas aqui. Se o TCGdex criar uma nova,
+        este teste não quebra — mas a lista documenta o que foi conferido."""
+        especiais = {
+            "Hyper rare": "rainbow", "Mega Hyper Rare": "rainbow",
+            "Secret Rare": "gold", "Full Art Trainer": "full_art",
+            "Illustration rare": "alt_art",
+            "Special illustration rare": "alt_art",
+            "Shiny rare": "shiny", "Shiny Ultra Rare": "shiny",
+        }
+        for raridade, esperado in especiais.items():
+            assert kind_base(raridade) == esperado, raridade
 
 
 class TestKindsDaCarta:

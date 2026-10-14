@@ -32,10 +32,20 @@ from dataclasses import dataclass, field
 # Raridade -> tipo do slot base. Primeiro casamento ganha, então a ordem
 # importa: 'Rainbow Rare' antes de 'Rare', 'Special Illustration' antes de
 # 'Illustration'.
+# Conferido contra as 42 raridades que /en/rarities lista. O TCGdex NÃO usa a
+# palavra "rainbow": a rainbow rare se chama "Hyper rare" lá, e "Secret Rare"
+# é a dourada. Mapear hyper para gold rotulava 82 cartas rainbow como gold.
+#
+# Ficam de fora, caindo em 'regular' de propósito: Rare Holo LV.X, Rare PRIME,
+# LEGEND, ACE SPEC Rare, Radiant Rare, Amazing Rare, Pikachu Rare, Black White
+# Rare, Futuristic Rare e Classic Collection. São tipos de carta, não
+# impressões alternativas da mesma carta — o slot é a impressão base dela, e a
+# raridade aparece em coluna própria no masterset. 'Ultra Rare' também fica:
+# cobre GX, V e EX, que nem sempre são full art.
 RARIDADE_PARA_KIND: tuple[tuple[str, str], ...] = (
-    (r"rainbow", "rainbow"),
+    (r"hyper\s*rare|rainbow", "rainbow"),
     (r"full\s*art", "full_art"),
-    (r"(secret|hyper\s*rare|gold)", "gold"),
+    (r"(secret|gold)", "gold"),
     (r"illustration\s*rare", "alt_art"),
     (r"shiny|shining", "shiny"),
 )

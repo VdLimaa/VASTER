@@ -503,3 +503,99 @@ contribuição de volta ao projeto, que é open source.
 A era EX está em 53% — nem claramente boa nem claramente quebrada. Não entrou
 na regra porque não consigo distinguir, só pelo número, quais coleções da era
 realmente têm RF e quais são dado faltando. Fica para a curadoria.
+
+## 16. O que da API ainda não é usado
+
+Inventário feito em 2026-10-14, comparando o que `/cards/{id}` devolve com o
+que o schema guarda.
+
+### Em uso
+
+`/{lang}/sets`, `/{lang}/sets/{id}`, `/{lang}/cards`, `/{lang}/cards/{id}`,
+`/{lang}/cards?dexId=N`, `/{lang}/series`, `/{lang}/series/{id}` e `/graphql`.
+
+### Fora de uso, por ordem de valor
+
+**1. `pricing` e `variants_detailed[].pricing` — a camada de preço inteira.**
+
+Cada carta traz preço de Cardmarket em EUR e de TCGplayer em USD, **por
+variante**, com `variantId` e data de atualização:
+
+```json
+{ "type": "reverse", "variantId": "cm4kqul3x1bwlz1f",
+  "pricing": { "cardmarket": { "unit": "EUR", "low": 0.02, "avg": 0.05,
+                               "trend": 0.07, "updated": "2026-10-13" } } }
+```
+
+O documento de arquitetura planeja a F3 com Mercado Livre e pokemontcg.io. Boa
+parte já está aqui, de graça, e na granularidade certa: por variante, que é
+exatamente a granularidade de `card_variant`. A coluna
+`card_variant.api_variant_id` existe desde a F0 para receber esse `variantId`.
+
+Limite medido: **o GraphQL não expõe `pricing`** — `{ cards { pricing } }`
+responde `Cannot query field "pricing" on type "Card"`. Então preço custa uma
+requisição por carta, como o `details` do caminho REST. O comando
+`details --bulk` não traz, e isso está dito na saída dele.
+
+Falta converter para BRL. A PTAX do Banco Central serve e responde sem chave:
+`olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo`.
+
+**2. `updated` — quando a carta mudou pela última vez.**
+
+Campo por carta, com timestamp. Hoje o `update` decide o que rebuscar por
+`details_at is null`, então carta que mudou no TCGdex nunca é reprocessada.
+Com `updated` dá para rebuscar só o que mudou de verdade.
+
+**3. Catorze endpoints auxiliares, nenhum usado:**
+
+| Endpoint | Itens | Para quê |
+| --- | ---: | --- |
+| `/rarities` | 42 | vocabulário de raridade — **foi lendo este que achei o erro do rainbow** |
+| `/dex-ids` | 1.025 | lista de espécies sem depender da PokéAPI |
+| `/illustrators` | 412 | filtro por ilustrador, que colecionador usa muito |
+| `/types` | 11 | filtro por tipo |
+| `/stages` | 11 | Basic, Stage 1, Stage 2… |
+| `/variants` | 5 | confirma os cinco tipos: normal, reverse, holo, firstEdition, wPromo |
+| `/regulation-marks` | 9 | a letra que define rotação de formato |
+| `/hp`, `/retreats`, `/categories`, `/energy-types`, `/trainer-types`, `/suffixes`, `/series` | 36, 5, 3, 2, 6, 8, 21 | vocabulários de filtro |
+
+São as listas que a tela da F2 precisa para montar filtros sem inventar
+valores. O protótipo hoje deriva os tipos de variante do próprio dado, que
+funciona para uma espécie mas não para um filtro global.
+
+**4. Campos de jogo que não guardo:** `hp`, `types`, `stage`, `attacks`,
+`weaknesses`, `resistances`, `retreat`, `description`, `legal`,
+`regulationMark`. Um masterset não precisa deles. Uma busca tipo "todo Sableye
+Psychic" ou um filtro por legalidade de formato precisa.
+
+**5. Campos de coleção:** `abbreviation`, `legal`, `tcgOnline` e o `cardCount`
+detalhado — `{normal, holo, reverse, firstEd}` por set, além de `total` e
+`official`.
+
+**6. Os outros idiomas:** `fr`, `de`, `it`, `es`. Checados por outro motivo e
+com resultado útil abaixo.
+
+### O que a conferência produziu
+
+**`variants` é independente de idioma.** Testei `bw1-1` nos quinze idiomas:
+`en`, `fr`, `de`, `it`, `es` e `pt` devolvem o MESMO objeto `variants`, todos
+com `reverse: false`. O nome muda, a variante não. Então nenhum outro idioma
+pode consertar o buraco de reverse holo da seção 15 — a inferência continua
+sendo o único caminho.
+
+**`cardCount` corrobora o buraco.** Por set: `bw1` e `xy2` dão `reverse: 0`,
+`sm11` dá 2, enquanto `swsh7` dá 132 e `dp1` dá 123. É derivado das mesmas
+flags, então confirma sem resolver.
+
+**Erro de rótulo encontrado e corrigido.** O TCGdex não usa a palavra
+"rainbow": a rainbow rare se chama `Hyper rare` e a dourada é `Secret Rare` —
+raridades distintas na API. O gerador casava as duas no mesmo regex e mandava
+para `gold`, então 82 cartas rainbow apareciam como gold. Corrigido em
+`0010_rainbow.sql`, que **relabela** os 432 slots afetados em vez de recriar,
+para preservar curadoria e não duplicar carta.
+
+Dez raridades continuam caindo em `regular` de propósito: `Rare Holo LV.X`,
+`Rare PRIME`, `LEGEND`, `ACE SPEC Rare`, `Radiant Rare`, `Amazing Rare`,
+`Pikachu Rare`, `Black White Rare`, `Futuristic Rare` e `Classic Collection`.
+São tipos de carta, não impressões alternativas da mesma carta — o slot é a
+impressão base dela, e a raridade já aparece em coluna própria no masterset.
