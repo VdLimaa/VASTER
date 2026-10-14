@@ -42,6 +42,35 @@ requisições REST. O japonês não tem equivalente — o GraphQL do TCGdex não
 filtro de idioma — e custa 12.781 requisições, uns 6 minutos, gravadas em lotes
 de 400 para a execução ser retomável.
 
+## Acompanhar coleção nova
+
+```bash
+python -m ingest update
+```
+
+Pega só o que entrou desde a última execução, em ~50 s, e diz o que mudou pelo
+nome. Todos os passos são idempotentes, e o caro — `details` carta a carta no
+catálogo japonês — só toca carta sem `details_at`, então uma coleção japonesa
+nova custa ~100 requisições em vez de 12.781. É o comando que o scheduler da F2
+vai chamar; até lá, um `cron` semanal resolve.
+
+Testado apagando a coleção `M6` do banco e rodando `update`: ela voltou sozinha
+com as 113 cartas, 87 vínculos de espécie e 113 slots, e o relatório disse
+`coleção nova: M6 [jp] ストームエメラルダ (2026-07-31)`.
+
+**Com que atraso o TCGdex recebe lançamento novo?** Medido em 2026-10-14:
+
+| Coleção | Lançada | Dias | Em inglês | Em português | Com scan PT |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `30th` Celebração de 30 Anos | 2026-09-16 | 28 | 158/158 | 2 | 2 |
+| `30th-c` Coleção Clássica | 2026-09-16 | 28 | 30/30 | 30 | 0 |
+| `me05` Escuridão Absoluta | 2026-07-17 | 89 | 120/120 | 120 | 120 |
+| `me04` Caos Ascendente | 2026-05-22 | 145 | 122/122 | 122 | 122 |
+
+O inglês entra praticamente junto com o lançamento. O português chega depois, em
+semanas a poucos meses. Scan japonês de coleção recente não chega: `M6` (75
+dias), `M5` (145), `M4` (215) e `M3` (264) estão todos com zero scans.
+
 Depois disso, qualquer espécie responde:
 
 ```bash
@@ -87,6 +116,7 @@ do slot, não do app: o mesmo colecionador mistura PT e EN no mesmo fichário.
 | `details` | `variants`, `rarity`, `category`, `dexId` | 1 por carta |
 | `links` | preenche `card_species` a partir do `dexId` | — |
 | `slots` | gera `card_variant` aplicando a política por era | — |
+| `update` | só o delta desde a última execução | ~50 s |
 | `refresh` | recalcula a materialized view `price_current` | — |
 | `coverage` | relatório de cobertura PT por era | — |
 | `gate` | verifica o gate da F0 de uma espécie | — |

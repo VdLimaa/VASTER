@@ -609,6 +609,99 @@ async def _alvos(
         return [(r["tcgdex_id"], r["region"]) for r in cur.fetchall()]
 
 
+async def atualizar(
+    conn: psycopg.Connection, cfg: Config, *, verbose: bool = True
+) -> list[Resultado]:
+    """Pega o que entrou desde a última execução e para por aí.
+
+    É o comando do scheduler. Todos os passos são idempotentes e o caro —
+    details carta a carta no catálogo japonês — só toca carta sem details_at,
+    então uma coleção japonesa nova custa ~100 requisições em vez de 12.781.
+
+    Medido em 2026-10-14: o TCGdex tinha a coleção '30th', lançada 28 dias
+    antes, completa em inglês e com o nome da coleção já em português. O
+    overlay PT das cartas chega depois — 'me05', de 89 dias, estava 120/120 em
+    português com scan. Ou seja: rodar isto uma vez por semana acompanha o
+    inglês de perto e o português com algumas semanas de atraso, que é a
+    latência da própria base.
+    """
+    antes = _retrato(conn)
+    passos: list[Resultado] = []
+
+    for regiao in ("west", "jp"):
+        passos.append(await ingerir_sets(conn, cfg, region=regiao))
+    for regiao in ("west", "jp"):
+        passos.append(await ingerir_cartas(conn, cfg, region=regiao))
+
+    # Oeste em uma requisição; japonês só nas cartas que ainda não têm detalhe.
+    passos.append(await ingerir_detalhes_bulk(conn, cfg))
+    passos.append(
+        await ingerir_detalhes(conn, cfg, todas=True, region="jp", refazer=False)
+    )
+
+    passos.append(ligar_especies(conn, todas=True))
+    passos.append(gerar(conn, cfg, todas=True))
+
+    depois = _retrato(conn)
+    resumo = Resultado("update")
+    rotulos = {
+        "colecoes": "coleções",
+        "cartas": "cartas",
+        "vinculos": "vínculos carta-espécie",
+        "slots": "slots",
+    }
+    mudou = False
+    for chave, rotulo in rotulos.items():
+        delta = depois[chave] - antes[chave]
+        if delta:
+            mudou = True
+            resumo.observacoes.append(f"+{delta} {rotulo} (total {depois[chave]})")
+    if not mudou:
+        resumo.observacoes.append("nada novo no catálogo")
+    else:
+        novas = _colecoes_novas(conn, antes["colecoes"])
+        for linha in novas:
+            resumo.observacoes.append(
+                f"coleção nova: {linha['tcgdex_id']} [{linha['region']}] "
+                f"{linha['nome']} ({linha['release_date']})"
+            )
+    passos.append(resumo)
+    if verbose:
+        for r in passos:
+            print(r)
+    return passos
+
+
+def _retrato(conn: psycopg.Connection) -> dict[str, int]:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select (select count(*) from card_set)     as colecoes,
+                   (select count(*) from card)         as cartas,
+                   (select count(*) from card_species) as vinculos,
+                   (select count(*) from card_variant) as slots
+            """
+        )
+        return dict(cur.fetchone())
+
+
+def _colecoes_novas(conn: psycopg.Connection, quantas_antes: int) -> list[dict]:
+    """As coleções ingeridas mais recentemente, para o relatório dizer o que
+    entrou em vez de só um número."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select tcgdex_id, region,
+                   coalesce(name_pt, name_en) as nome, release_date
+            from card_set
+            order by ingested_at desc, id desc
+            limit greatest(0, (select count(*) from card_set) - %s)
+            """,
+            (quantas_antes,),
+        )
+        return cur.fetchall()
+
+
 # --------------------------------------------------------------------------
 # vínculo carta-espécie
 # --------------------------------------------------------------------------

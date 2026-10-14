@@ -43,6 +43,11 @@ def main(argv: list[str] | None = None) -> int:
     _regiao(st)
     cd = sub.add_parser("cards", help="ingere todas as cartas (2 requisições)")
     _regiao(cd)
+    sub.add_parser(
+        "update",
+        help="pega só o que entrou desde a última execução. É o comando do "
+        "scheduler: roda semanal e acompanha coleção nova",
+    )
     sub.add_parser("refresh", help="recalcula a materialized view de preço")
     sub.add_parser("coverage", help="relatório de cobertura PT por era")
 
@@ -176,6 +181,10 @@ def main(argv: list[str] | None = None) -> int:
                     auto_confirmar=args.auto_confirmar,
                 )
             )
+            return 0
+
+        if args.cmd == "update":
+            asyncio.run(pipeline.atualizar(conn, cfg))
             return 0
 
         if args.cmd == "refresh":
