@@ -83,10 +83,25 @@ para cada um.
 | [CardTrader](https://api.cardtrader.com/) | token. Tem filtro de idioma oficial e é a melhor cobertura 1999-2003 |
 | Scrydex | conta ou autorização escrita |
 
-## Uma só precisa de liberação de rede
+## Internet Archive: inalcançável, e não é configuração
 
-[web.archive.org](https://web.archive.org/) é o único host desta lista que o
-**proxy do container** derruba — a conexão é resetada antes de chegar. É onde
-está o site da Devir de 2003-2011 arquivado, que é a fonte primária da era onde
-o TCGdex é zero em PT. Liberar esse domínio no ambiente é a única mudança de
-acesso que muda alguma coisa.
+O site da **Devir** arquivado (2003-2011) seria a fonte primária da era onde o
+TCGdex é zero em português. Não dá para chegar nele desta sessão, e o motivo
+não é a política de rede do ambiente — ela está em acesso completo.
+
+Medido em 2026-10-14, por todos os caminhos disponíveis:
+
+| Caminho | Resultado |
+| --- | --- |
+| `curl https://archive.org/` | HTTP 200 |
+| `curl https://archive.org/wayback/available?url=...` | **HTTP 429 Too Many Requests**, persistente mesmo com 4 tentativas espaçadas de 15s |
+| `curl https://web.archive.org/web/2006/...` | conexão resetada aos 7s, toda vez |
+| `WebFetch` em `web.archive.org` | bloqueado pelo próprio Claude Code |
+| `WebFetch` em `archive.org` | DNS não resolve |
+
+O 429 é a assinatura: o Internet Archive limita por taxa o IP de datacenter
+desta sessão. Liberar domínio não muda nada, porque não há domínio bloqueado.
+
+**É consulta manual.** O Wayback abre normalmente num navegador comum. O que o
+projeto pode fazer é o que já faz com Copag e Bulbapedia: a tela de curadoria
+monta o link, a pessoa abre, confere e grava a prova em `source_url`.

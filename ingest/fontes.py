@@ -146,6 +146,17 @@ def para_slot(
                  "não integração.",
         ))
 
+    if language == "pt":
+        fontes.append(Fonte(
+            nome="Internet Archive — site da Devir na época",
+            url="https://web.archive.org/web/2006/http://www.devir.com.br/",
+            para_que="fonte primária da era 2003-2011, onde o TCGdex é zero em PT",
+            acesso="manual",
+            nota="o Internet Archive limita por taxa o IP desta sessão (429) e "
+                 "derruba a conexão em web.archive.org. Não é configuração de "
+                 "rede: num navegador comum abre normal.",
+        ))
+
     fontes.append(Fonte(
         nome="TCGdex — contribuir de volta",
         url="https://github.com/tcgdex/cards-database",
