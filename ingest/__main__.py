@@ -20,6 +20,7 @@ import asyncio
 import json
 import sys
 
+from . import fontes as fontes_mod
 from . import pipeline
 from .config import Config
 from .db import connect, migrate, query, refresh_price_current
@@ -83,6 +84,14 @@ def main(argv: list[str] | None = None) -> int:
         help="não promove o slot principal mesmo quando o TCGdex tem a carta "
         "naquele idioma",
     )
+
+    fo = sub.add_parser(
+        "fontes",
+        help="onde pesquisar um slot que o TCGdex não resolve",
+    )
+    fo.add_argument("--card", required=True, help="tcgdex_id da carta, ex: ex2-10")
+    fo.add_argument("--lang", default="pt", choices=("pt", "en", "ja"))
+    fo.add_argument("--region", default="west", choices=("west", "jp"))
 
     g = sub.add_parser("gate", help="verifica o gate da F0 para uma espécie")
     g.add_argument("--species", default="sableye")
@@ -200,6 +209,10 @@ def main(argv: list[str] | None = None) -> int:
             _masterset(conn, args)
             return 0
 
+        if args.cmd == "fontes":
+            _fontes(conn, args)
+            return 0
+
         if args.cmd == "gate":
             return _gate(conn, args.species)
 
@@ -295,6 +308,49 @@ def _masterset(conn, args) -> None:
         por_idioma[r["language"]] = por_idioma.get(r["language"], 0) + 1
     detalhe = ", ".join(f"{n} em {lang}" for lang, n in sorted(por_idioma.items()))
     print(f"{len(linhas)} slots ({detalhe})")
+
+
+def _fontes(conn, args) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select c.tcgdex_id, c.number, c.region,
+                   coalesce(c.name_pt, c.name_en, c.name_ja) as nome,
+                   c.name_en, cs.tcgdex_id as set_id,
+                   coalesce(cs.name_pt, cs.name_en) as set_name,
+                   cs.release_date, cs.pt_release
+            from card c join card_set cs on cs.id = c.set_id
+            where c.tcgdex_id = %s and c.region = %s
+            """,
+            (args.card, args.region),
+        )
+        carta = cur.fetchone()
+    if not carta:
+        raise SystemExit(f"carta '{args.card}' não existe na região '{args.region}'")
+
+    era = fontes_mod.era_br(carta["release_date"])
+    print(f"{carta['nome']} · {carta['set_name']} {carta['number']} · {args.lang}")
+    print(f"  lançamento {carta['release_date']} · pt_release={carta['pt_release']}")
+    if era:
+        print(f"  quem imprimia no Brasil: {era[0]} — {era[1]}")
+    print()
+    for f in fontes_mod.para_slot(
+        card_name=carta["nome"] or "",
+        card_name_en=carta["name_en"],
+        set_name=carta["set_name"] or "",
+        set_id=carta["set_id"],
+        number=carta["number"],
+        language=args.lang,
+        kind="",
+        region=carta["region"],
+    ):
+        marca = "automatizável" if f.acesso == "auto" else "só no navegador"
+        print(f"  {f.nome}  [{marca}]")
+        print(f"    {f.url}")
+        print(f"    para: {f.para_que}")
+        if f.nota:
+            print(f"    nota: {f.nota}")
+        print()
 
 
 def _gate(conn, slug: str) -> int:
