@@ -19,7 +19,7 @@ import asyncio
 
 import httpx
 
-from .species import Especie, nome_de_slug
+from .species import REGIAO_POR_GERACAO, Especie, nome_de_slug
 
 
 async def listar_especies(
@@ -47,8 +47,9 @@ async def listar_especies(
             basicas.append((dex, slug))
 
         nomes_ja: dict[int, str] = {}
+        geracoes: dict[int, str] = {}
         if com_japones:
-            nomes_ja = await _nomes_japoneses(client, base, basicas, concorrencia)
+            nomes_ja, geracoes = await _detalhes(client, base, basicas, concorrencia)
     finally:
         if proprio:
             await client.aclose()
@@ -63,33 +64,45 @@ async def listar_especies(
                 name_en=nome,
                 name_pt=nome,
                 name_ja=nomes_ja.get(dex),
+                generation=geracoes.get(dex),
+                region=REGIAO_POR_GERACAO.get(geracoes.get(dex) or ""),
             )
         )
     return especies
 
 
-async def _nomes_japoneses(
+async def _detalhes(
     client: httpx.AsyncClient,
     base: str,
     basicas: list[tuple[int, str]],
     concorrencia: int,
-) -> dict[int, str]:
-    """Uma requisição por espécie. É o preço de alcançar as cartas japonesas
-    que o TCGdex entrega sem dexId."""
+) -> tuple[dict[int, str], dict[int, str]]:
+    """Uma requisição por espécie, trazendo nome japonês e geração juntos.
+
+    O nome japonês é o que alcança as 434 cartas japonesas que o TCGdex
+    entrega sem dexId. A geração é o que permite recortar o masterset por
+    região — 'só os de Kanto'. Vêm na mesma resposta, então a segunda sai de
+    graça.
+    """
     sem = asyncio.Semaphore(concorrencia)
 
-    async def um(dex: int) -> tuple[int, str | None]:
+    async def um(dex: int) -> tuple[int, str | None, str | None]:
         async with sem:
             try:
                 r = await client.get(f"{base.rstrip('/')}/pokemon-species/{dex}")
                 r.raise_for_status()
-                nomes = r.json().get("names") or []
+                corpo = r.json()
             except httpx.HTTPError:
-                return dex, None
-        for n in nomes:
+                return dex, None, None
+        ja = None
+        for n in corpo.get("names") or []:
             if (n.get("language") or {}).get("name") == "ja":
-                return dex, n.get("name")
-        return dex, None
+                ja = n.get("name")
+                break
+        geracao = (corpo.get("generation") or {}).get("name")
+        return dex, ja, geracao
 
     resultados = await asyncio.gather(*(um(dex) for dex, _ in basicas))
-    return {dex: nome for dex, nome in resultados if nome}
+    nomes = {dex: ja for dex, ja, _ in resultados if ja}
+    geracoes = {dex: g for dex, _, g in resultados if g}
+    return nomes, geracoes

@@ -83,16 +83,20 @@ def gravar_especies(conn: psycopg.Connection, especies: list[Especie]) -> Result
         for e in especies:
             cur.execute(
                 """
-                insert into species (dex_number, slug, name_en, name_pt, name_ja)
-                values (%s, %s, %s, %s, %s)
+                insert into species
+                  (dex_number, slug, name_en, name_pt, name_ja, generation, region)
+                values (%s, %s, %s, %s, %s, %s, %s)
                 on conflict (dex_number) do update
                   set slug = excluded.slug,
                       name_en = excluded.name_en,
                       name_pt = excluded.name_pt,
-                      name_ja = coalesce(excluded.name_ja, species.name_ja)
+                      name_ja = coalesce(excluded.name_ja, species.name_ja),
+                      generation = coalesce(excluded.generation, species.generation),
+                      region = coalesce(excluded.region, species.region)
                 returning (xmax = 0) as novo
                 """,
-                (e.dex_number, e.slug, e.name_en, e.name_pt, e.name_ja),
+                (e.dex_number, e.slug, e.name_en, e.name_pt, e.name_ja,
+                 e.generation, e.region),
             )
             row = cur.fetchone()
             if row and row["novo"]:
@@ -105,7 +109,10 @@ def gravar_especies(conn: psycopg.Connection, especies: list[Especie]) -> Result
 
 def carregar_indice(conn: psycopg.Connection) -> IndiceEspecies:
     with conn.cursor() as cur:
-        cur.execute("select dex_number, slug, name_en, name_pt, name_ja from species")
+        cur.execute(
+            "select dex_number, slug, name_en, name_pt, name_ja, generation, region "
+            "from species"
+        )
         return IndiceEspecies([Especie(**r) for r in cur.fetchall()])
 
 

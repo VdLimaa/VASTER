@@ -22,12 +22,19 @@ pytestmark = pytest.mark.skipif(not DSN, reason="VASTER_TEST_DSN não definido")
 
 QUERIES = pathlib.Path(__file__).parent.parent / "db" / "queries"
 
+# Todo parâmetro que qualquer .sql de db/queries possa pedir. O teste manda
+# só os que a consulta usa, então a lista pode crescer sem quebrar as antigas.
 PARAMS = {
     "slug": "sableye",
     "user_id": None,
     "include_absent": False,
     "include_digital": False,
     "languages": None,
+    "set_id": None,
+    "region": None,
+    "species": None,
+    "kinds": None,
+    "status": None,
 }
 
 

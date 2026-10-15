@@ -243,6 +243,62 @@ confirmar, porque o registro é a evidência. **Fora do catálogo** é um slot q
 ninguém decide sem a carta na mão — e não prova que a carta não existe, já que
 o TCGdex não tem uma única carta em português antes de 2011.
 
+## Rodar em localhost
+
+```bash
+docker compose up -d db
+cp .env.example .env
+uv venv && source .venv/bin/activate
+uv pip install -e '.[dev,api]'
+
+python -m ingest migrate
+python -m ingest species && python -m ingest sets && python -m ingest cards
+python -m ingest details --all --bulk
+python -m ingest links --all && python -m ingest slots --all
+
+uvicorn api.main:app --reload
+```
+
+Abre em http://127.0.0.1:8000. A ingestão completa leva ~7 minutos e só precisa
+rodar uma vez; depois, `python -m ingest update` pega o que entrou de novo.
+
+### A tela
+
+Monta o fichário de **qualquer recorte**, combinando quatro filtros:
+
+| Filtro | Exemplo |
+| --- | --- |
+| Idioma | português (padrão), inglês, japonês |
+| Região | Kanto, Johto, Hoenn… — é da **espécie**, não da coleção, então um Pikachu numa coleção de Paldea continua sendo de Kanto |
+| Coleção | busca por nome ou id: `151`, `Céus em Evolução`, `sv03.5` |
+| Tipo | Normal, Reverse holo (RF), Holo, Arte especial / full art, Rainbow e gold, Shiny, Promo, 1ª edição |
+
+O caso que motivou isso — *masterset só de Pokémon de Kanto da coleção 151, em
+full art, em português* — são **21 slots**, todos confirmados pelo catálogo:
+Bulbasaur 169/165, Ivysaur, Charmander, Squirtle, Pikachu, Nidoking e as outras
+illustration rares.
+
+Cada slot tem **Tenho / Quero / Falta**, salvos no navegador — sem login, como
+no fichário de verdade. "Tenho" mostra a carta colorida, "Falta" em cinza.
+
+Os rótulos de tipo são os que o colecionador usa, não os do enum: ninguém
+procura `alt_art`, procura *arte especial*. A tradução fica em
+`api/consultas.py`; o enum continua sendo a verdade no banco.
+
+### Rotas
+
+| Rota | Devolve |
+| --- | --- |
+| `GET /api/saude` | contagens do catálogo |
+| `GET /api/idiomas` | os três idiomas |
+| `GET /api/regioes` | as 9 regiões, com espécies e slots |
+| `GET /api/tipos?colecao=` | os grupos de tipo que existem no recorte |
+| `GET /api/colecoes?regiao=&idioma=&busca=` | coleções com slots no recorte |
+| `GET /api/binder?colecao=&regiao=&tipo=&idioma=` | os slots, com resumo de progresso |
+
+`/api/binder` exige pelo menos um recorte — sem filtro seriam os 89 mil slots
+do catálogo, o que derruba a tela e não serve para ninguém.
+
 ## Protótipo da tela
 
 `web/prototipo/` é um HTML solto, sem build, para validar a interação antes de

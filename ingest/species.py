@@ -110,6 +110,33 @@ def eh_pokemon(categoria: str | None) -> bool:
     return categoria.strip().lower() in CATEGORIAS_POKEMON
 
 
+# Conferido em /api/v2/generation/{1..9}: soma 1.025 espécies, o nosso total.
+REGIAO_POR_GERACAO = {
+    "generation-i": "kanto",
+    "generation-ii": "johto",
+    "generation-iii": "hoenn",
+    "generation-iv": "sinnoh",
+    "generation-v": "unova",
+    "generation-vi": "kalos",
+    "generation-vii": "alola",
+    "generation-viii": "galar",
+    "generation-ix": "paldea",
+}
+
+# Como o colecionador brasileiro chama cada uma.
+NOME_REGIAO = {
+    "kanto": "Kanto",
+    "johto": "Johto",
+    "hoenn": "Hoenn",
+    "sinnoh": "Sinnoh",
+    "unova": "Unova",
+    "kalos": "Kalos",
+    "alola": "Alola",
+    "galar": "Galar",
+    "paldea": "Paldea",
+}
+
+
 @dataclass(frozen=True)
 class Especie:
     dex_number: int
@@ -117,6 +144,8 @@ class Especie:
     name_en: str
     name_pt: str
     name_ja: str | None = None
+    generation: str | None = None
+    region: str | None = None
 
 
 class IndiceEspecies:
