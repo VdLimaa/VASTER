@@ -57,6 +57,20 @@ input[type="search"] { font: inherit; font-size: 14px; padding: 7px 12px; border
         border: 1px solid var(--line); background: var(--surface-2); color: var(--fg);
         min-width: 0; flex: 1 1 240px; }
 input[type="search"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Era, ano e raridade não cabem em chip: a 151 sozinha tem 8 raridades e o
+   catálogo inteiro tem 32. Select mantém a barra de filtro em uma linha. */
+select { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 999px;
+         border: 1px solid var(--line); background: var(--surface-2); color: var(--fg-dim);
+         cursor: pointer; max-width: 300px; }
+select:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+select:disabled { opacity: .5; cursor: default; }
+/* Filtro ativo tem o mesmo destaque do chip apertado: a barra inteira
+   responde a "o que está ligado agora?" da mesma forma. */
+select:has(option[value=""]:not(:checked)) {
+  background: var(--accent-soft); color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.sem-achado { font-size: 12.5px; color: var(--fg-mute); }
 
 .colecoes { margin-top: 2px; max-height: 300px; overflow-y: auto;
             border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }

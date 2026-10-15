@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
+  FACETAS_VAZIAS,
+  RECORTE_VAZIO,
+  temEscopo,
   type Binder,
   type Colecao,
   type Demo,
-  type Idioma,
+  type Especie,
+  type Facetas,
   type Opcao,
+  type Recorte,
   type Saude,
 } from "./api";
 import { Fichario } from "./componentes/Fichario";
@@ -15,13 +20,7 @@ import { Filtros } from "./componentes/Filtros";
 import { Resumo } from "./componentes/Resumo";
 import { alternar, carregar, salvar, type Marca } from "./marcas";
 
-interface Recorte {
-  idioma: Idioma;
-  regiao: string | null;
-  tipo: string | null;
-  colecao: string | null;
-  grade: Grade;
-}
+type Estado = Recorte & { grade: Grade };
 
 /**
  * Com API no ar a tela monta qualquer recorte. Sem API, cai no snapshot
@@ -30,21 +29,19 @@ interface Recorte {
  */
 type Modo = "descobrindo" | "api" | "demo" | "nada";
 
-const INICIAL: Recorte = {
+const INICIAL: Estado = {
   idioma: "pt", // português é o padrão: é o ponto do projeto
-  regiao: null,
-  tipo: null,
-  colecao: null,
+  ...RECORTE_VAZIO,
   grade: GRADES[1], // 3x3, o fichário clássico
 };
 
 export default function App() {
-  const [recorte, setRecorte] = useState<Recorte>(INICIAL);
+  const [recorte, setRecorte] = useState<Estado>(INICIAL);
   const [busca, setBusca] = useState("");
   const [idiomas, setIdiomas] = useState<Opcao[]>([]);
-  const [regioes, setRegioes] = useState<Opcao[]>([]);
-  const [tipos, setTipos] = useState<Opcao[]>([]);
+  const [facetas, setFacetas] = useState<Facetas>(FACETAS_VAZIAS);
   const [colecoes, setColecoes] = useState<Colecao[]>([]);
+  const [especie, setEspecie] = useState<Especie | null>(null);
   const [binder, setBinder] = useState<Binder | null>(null);
   const [saude, setSaude] = useState<Saude | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -82,30 +79,44 @@ export default function App() {
   useEffect(() => {
     if (modo !== "api") return;
     api.idiomas().then(setIdiomas).catch(() => setIdiomas([]));
-    api.regioes().then(setRegioes).catch(() => setRegioes([]));
   }, [modo]);
 
-  // Os tipos dependem da coleção: mostrar um filtro que não filtra nada é
-  // pior que não mostrar.
+  // As facetas e a lista de coleções seguem o recorte inteiro: mostrar um
+  // filtro que não filtra nada é pior que não mostrar. Uma requisição para as
+  // cinco listas — ver db/queries/facetas.sql.
   useEffect(() => {
     if (modo !== "api") return;
-    api.tipos(recorte.colecao).then(setTipos).catch(() => setTipos([]));
-  }, [modo, recorte.colecao]);
+    let cancelado = false;
+    const t = setTimeout(() => {
+      api
+        .facetas(recorte)
+        .then((f) => !cancelado && setFacetas(f))
+        .catch(() => !cancelado && setFacetas(FACETAS_VAZIAS));
+    }, 180);
+    return () => {
+      cancelado = true;
+      clearTimeout(t);
+    };
+  }, [modo, recorte]);
 
   useEffect(() => {
     if (modo !== "api") return;
+    let cancelado = false;
     const t = setTimeout(() => {
       api
-        .colecoes({ idioma: recorte.idioma, regiao: recorte.regiao, busca })
-        .then(setColecoes)
-        .catch(() => setColecoes([]));
+        .colecoes(recorte, busca)
+        .then((c) => !cancelado && setColecoes(c))
+        .catch(() => !cancelado && setColecoes([]));
     }, 220);
-    return () => clearTimeout(t);
-  }, [modo, recorte.idioma, recorte.regiao, busca]);
+    return () => {
+      cancelado = true;
+      clearTimeout(t);
+    };
+  }, [modo, recorte, busca]);
 
   // Derivado, não estado: ter recorte é uma leitura do que já está no
   // recorte, e calcular no render evita um setState dentro do efeito.
-  const temRecorte = Boolean(recorte.colecao || recorte.regiao);
+  const temRecorte = temEscopo(recorte);
 
   useEffect(() => {
     if (modo !== "api" || !temRecorte) return;
@@ -117,12 +128,7 @@ export default function App() {
     // oxlint-disable-next-line react/set-state-in-effect
     setCarregando(true);
     api
-      .binder({
-        idioma: recorte.idioma,
-        colecao: recorte.colecao,
-        regiao: recorte.regiao,
-        tipo: recorte.tipo,
-      })
+      .binder(recorte)
       .then((d) => {
         if (cancelado) return;
         setBinder(d);
@@ -134,9 +140,9 @@ export default function App() {
     return () => {
       cancelado = true;
     };
-  }, [modo, temRecorte, recorte.idioma, recorte.colecao, recorte.regiao, recorte.tipo]);
+  }, [modo, temRecorte, recorte]);
 
-  const mudar = useCallback((p: Partial<Recorte>) => {
+  const mudar = useCallback((p: Partial<Estado>) => {
     setRecorte((r) => ({ ...r, ...p }));
     if (!("grade" in p)) setAbertura(0);
   }, []);
@@ -154,8 +160,7 @@ export default function App() {
   // sabem de onde veio o dado.
   const recortePronto = demo?.recortes.find((r) => r.chave === escolhido) ?? null;
   // Sem recorte, nada do binder anterior aparece — nem por um quadro.
-  const dados: Binder | null =
-    modo === "demo" ? recortePronto : temRecorte ? binder : null;
+  const dados: Binder | null = modo === "demo" ? recortePronto : temRecorte ? binder : null;
   const slots = dados?.slots ?? [];
   const aberturas = useMemo(
     () => (slots.length ? totalAberturas(slots.length, recorte.grade) : 0),
@@ -178,17 +183,28 @@ export default function App() {
   }, [imprimindo]);
 
   const contagem = saude ?? demo?.saude ?? null;
-  const titulo = modo === "demo"
-    ? (recortePronto?.nome ?? "")
-    : binder
-    ? [
-        recorte.colecao ? colecoes.find((c) => c.set_id === recorte.colecao)?.set_name : null,
-        recorte.regiao ? regioes.find((r) => r.valor === recorte.regiao)?.nome : null,
-        recorte.tipo ? tipos.find((t) => t.valor === recorte.tipo)?.nome : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
+  const anos =
+    recorte.anoDe && recorte.anoAte && recorte.anoDe !== recorte.anoAte
+      ? `${recorte.anoDe}–${recorte.anoAte}`
+      : (recorte.anoDe ?? recorte.anoAte ?? null);
+  const titulo =
+    modo === "demo"
+      ? (recortePronto?.nome ?? "")
+      : binder
+        ? [
+            especie?.nome,
+            recorte.colecao ? colecoes.find((c) => c.set_id === recorte.colecao)?.set_name : null,
+            recorte.era,
+            recorte.regiao ? facetas.regioes.find((r) => r.valor === recorte.regiao)?.nome : null,
+            recorte.raridade
+              ? facetas.raridades.find((r) => r.valor === recorte.raridade)?.nome
+              : null,
+            recorte.tipo ? facetas.tipos.find((t) => t.valor === recorte.tipo)?.nome : null,
+            anos,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+        : "";
 
   return (
     <div className="wrap">
@@ -211,20 +227,25 @@ export default function App() {
           aoMudarGrade={(g) => mudar({ grade: g })}
         />
       ) : (
-      <Filtros
-        idiomas={idiomas}
-        regioes={regioes}
-        tipos={tipos}
-        colecoes={colecoes}
-        estado={recorte}
-        aoMudar={mudar}
-        busca={busca}
-        aoBuscar={setBusca}
-        aoLimpar={() => {
-          setRecorte({ ...INICIAL, idioma: recorte.idioma, grade: recorte.grade });
-          setBusca("");
-        }}
-      />
+        <Filtros
+          idiomas={idiomas}
+          facetas={facetas}
+          colecoes={colecoes}
+          especie={especie}
+          estado={recorte}
+          aoMudar={mudar}
+          aoEscolherEspecie={(e) => {
+            setEspecie(e);
+            mudar({ especie: e?.valor ?? null });
+          }}
+          busca={busca}
+          aoBuscar={setBusca}
+          aoLimpar={() => {
+            setRecorte({ ...INICIAL, idioma: recorte.idioma, grade: recorte.grade });
+            setEspecie(null);
+            setBusca("");
+          }}
+        />
       )}
 
       <div className="palco">
@@ -247,12 +268,13 @@ export default function App() {
           ) : !dados ? (
             <div className="vaziao">
               <strong>Escolha um recorte</strong>
-              Uma coleção, uma região, ou os dois — por exemplo Kanto dentro da coleção 151.
+              Um Pokémon, uma coleção, uma região ou uma era — e combine à vontade: Kanto
+              dentro da 151, ou todo Charizard em português de 1999 a 2010.
             </div>
           ) : slots.length === 0 ? (
             <div className="vaziao">
               <strong>Nenhum slot nesse recorte</strong>
-              Afrouxe o tipo ou troque o idioma.
+              Afrouxe um filtro ou troque o idioma.
             </div>
           ) : (
             <>

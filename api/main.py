@@ -14,12 +14,12 @@ from __future__ import annotations
 import pathlib
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from ingest.config import Config
-from ingest.db import connect, query
+from ingest.db import connect
 
 from . import consultas
 
@@ -49,86 +49,60 @@ def rota_saude(conn: Conn) -> dict:
     return {"ok": True, **consultas.saude(conn)}
 
 
-@app.get("/api/regioes")
-def rota_regioes(conn: Conn) -> list[dict]:
-    return consultas.regioes(conn)
-
-
 @app.get("/api/idiomas")
 def rota_idiomas() -> list[dict]:
     return [{"valor": k, "nome": v} for k, v in consultas.IDIOMAS.items()]
 
 
-@app.get("/api/tipos")
-def rota_tipos(conn: Conn, colecao: str | None = None) -> list[dict]:
-    return consultas.tipos(conn, set_id=colecao)
+@app.get("/api/facetas")
+def rota_facetas(conn: Conn, recorte: Annotated[consultas.Recorte, Depends()]) -> dict:
+    """Era, ano, raridade, tipo e região que ainda existem no recorte.
+
+    Uma requisição para as cinco listas, e cada uma conta ignorando o próprio
+    filtro — por isso trocar de era não exige limpar o recorte antes.
+    """
+    return consultas.facetas(conn, recorte)
+
+
+@app.get("/api/especies")
+def rota_especies(
+    conn: Conn,
+    busca: str | None = None,
+    regiao: str | None = None,
+    limite: int = 40,
+) -> list[dict]:
+    """As espécies, para montar o masterset de um Pokémon. Casa por nome em
+    inglês, por nome japonês, pelo slug e pelo número da Pokédex."""
+    return consultas.especies(conn, busca=busca, regiao=regiao, limite=min(limite, 200))
 
 
 @app.get("/api/colecoes")
 def rota_colecoes(
     conn: Conn,
-    regiao: str | None = None,
-    idioma: Annotated[list[str] | None, Query()] = None,
-    incluir_digital: bool = False,
+    recorte: Annotated[consultas.Recorte, Depends()],
     busca: str | None = None,
 ) -> list[dict]:
     """As coleções que têm slot no recorte pedido."""
-    idioma = idioma or ["pt"]
-    with conn.cursor() as cur:
-        cur.execute(
-            query("binder_colecoes"),
-            {
-                "region": regiao,
-                "languages": idioma or None,
-                "include_digital": incluir_digital,
-            },
-        )
-        linhas = [dict(r) for r in cur.fetchall()]
-    if busca:
-        alvo = busca.strip().lower()
-        linhas = [
-            r
-            for r in linhas
-            if alvo in (r["set_name"] or "").lower()
-            or alvo in (r["name_en"] or "").lower()
-            or alvo in (r["set_id"] or "").lower()
-        ]
-    return linhas
+    return consultas.colecoes(conn, recorte, busca=busca)
 
 
 @app.get("/api/binder")
 def rota_binder(
     conn: Conn,
-    colecao: str | None = None,
-    regiao: str | None = None,
-    especie: str | None = None,
-    tipo: Annotated[list[str] | None, Query()] = None,
-    idioma: Annotated[list[str] | None, Query()] = None,
+    recorte: Annotated[consultas.Recorte, Depends()],
     usuario: int | None = None,
-    incluir_absent: bool = False,
-    incluir_digital: bool = False,
 ) -> dict:
     """O recorte do masterset, com o resumo de progresso junto.
 
     Sem nenhum filtro isto devolveria os 89 mil slots do catálogo, o que não
     serve para ninguém e derruba a tela. Pelo menos um recorte é obrigatório.
     """
-    if not any((colecao, regiao, especie)):
+    if not recorte.tem_escopo():
         raise HTTPException(
             status_code=400,
-            detail="Escolha pelo menos uma coleção, região ou espécie.",
+            detail="Escolha pelo menos uma coleção, região, espécie ou era.",
         )
-    return consultas.binder(
-        conn,
-        set_id=colecao,
-        region=regiao,
-        species=especie,
-        tipo=tipo,
-        idiomas=idioma,
-        user_id=usuario,
-        incluir_absent=incluir_absent,
-        incluir_digital=incluir_digital,
-    )
+    return consultas.binder(conn, recorte, user_id=usuario)
 
 
 if (WEB / "index.html").exists():

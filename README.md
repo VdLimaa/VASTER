@@ -347,19 +347,42 @@ componentes em `web/app/src/componentes/` não dependem do roteador.
 
 ### A tela
 
-Monta o fichário de **qualquer recorte**, combinando quatro filtros:
+Monta o fichário de **qualquer recorte**, combinando sete filtros:
 
 | Filtro | Exemplo |
 | --- | --- |
 | Idioma | português (padrão), inglês, japonês |
+| **Pokémon** | busca por nome em inglês, por nome japonês ou pelo número: `charizard`, `リザードン`, `6` |
 | Região | Kanto, Johto, Hoenn… — é da **espécie**, não da coleção, então um Pikachu numa coleção de Paldea continua sendo de Kanto |
-| Coleção | busca por nome ou id: `151`, `Céus em Evolução`, `sv03.5` |
+| **Era** | Base, Neo, EX, Black & White, Scarlet & Violet… — e as japonesas, com os nomes delas |
+| **Ano** | de 1996 a hoje, pela data de lançamento da coleção |
+| **Raridade** | Comum, Incomum, Rara, Illustration rare, Ultra Rare, Secret Rare… |
 | Tipo | Normal, Reverse holo (RF), Holo, Arte especial / full art, Rainbow e gold, Shiny, Promo, 1ª edição |
+| Coleção | busca por nome ou id: `151`, `Céus em Evolução`, `sv03.5` |
 
-O caso que motivou isso — *masterset só de Pokémon de Kanto da coleção 151, em
-full art, em português* — são **21 slots**, todos confirmados pelo catálogo:
-Bulbasaur 169/165, Ivysaur, Charmander, Squirtle, Pikachu, Nidoking e as outras
-illustration rares.
+**Raridade não é tipo.** "Illustration Rare" é a raridade impressa na carta;
+"arte especial" é o tipo de slot. A mesma carta pode ser Ultra Rare *e* ter
+reverse holo — são dois eixos, e por isso dois filtros que se combinam.
+
+Dois recortes para ver o que isso dá:
+
+* *Pokémon de Kanto da coleção 151, em full art, em português* — **21 slots**,
+  todos confirmados pelo catálogo: Bulbasaur 169/165, Ivysaur, Charmander,
+  Squirtle, Pikachu, Nidoking e as outras illustration rares.
+* *todo Pikachu em português, de 1999 a 2005* — **38 slots**, e os 38 estão
+  fora do catálogo, porque o TCGdex não tem carta em português antes de 2011.
+  O fichário mostra o que falta provar, não só o que já está provado.
+
+#### Os filtros se corrigem sozinhos
+
+Cada filtro mostra só o que ainda existe no recorte, com a contagem junto:
+escolher a era Base deixa a raridade com `Rara (7)` e mais nada, porque é só o
+que sobrou. Chip que não filtra nada é pior que chip nenhum.
+
+Com uma ressalva que importa: **cada lista é contada ignorando o próprio
+filtro**. Escolher a era XY não faz as outras eras sumirem da lista — senão
+trocar de era exigiria limpar o recorte antes. Isso é uma consulta só, com
+contagem condicional por dimensão: `db/queries/facetas.sql`.
 
 Cada slot tem **Tenho / Quero / Falta**, salvos no navegador — sem login, como
 no fichário de verdade. "Tenho" mostra a carta colorida, "Falta" em cinza.
@@ -388,13 +411,20 @@ procura `alt_art`, procura *arte especial*. A tradução fica em
 | --- | --- |
 | `GET /api/saude` | contagens do catálogo |
 | `GET /api/idiomas` | os três idiomas |
-| `GET /api/regioes` | as 9 regiões, com espécies e slots |
-| `GET /api/tipos?colecao=` | os grupos de tipo que existem no recorte |
-| `GET /api/colecoes?regiao=&idioma=&busca=` | coleções com slots no recorte |
-| `GET /api/binder?colecao=&regiao=&tipo=&idioma=` | os slots, com resumo de progresso |
+| `GET /api/especies?busca=` | espécies por nome, nome japonês ou número da Pokédex |
+| `GET /api/facetas?<recorte>` | era, ano, raridade, tipo e região que existem no recorte, com contagem |
+| `GET /api/colecoes?<recorte>&busca=` | coleções com slots no recorte |
+| `GET /api/binder?<recorte>` | os slots, com resumo de progresso |
 
-`/api/binder` exige pelo menos um recorte — sem filtro seriam os 89 mil slots
-do catálogo, o que derruba a tela e não serve para ninguém.
+`<recorte>` é o mesmo conjunto de parâmetros nas três últimas:
+`idioma`, `colecao`, `regiao`, `especie`, `era`, `ano_de`, `ano_ate`,
+`raridade`, `tipo`. Em Python é uma dataclass só — `consultas.Recorte` — que
+vira dependência do FastAPI. Filtro novo entra num lugar e as três rotas
+enxergam.
+
+`/api/binder` exige **coleção, região, espécie ou era**. Sem nenhum dos quatro
+seriam os 89 mil slots do catálogo, o que derruba a tela e não serve para
+ninguém.
 
 ## Ver sem instalar nada
 
@@ -405,12 +435,13 @@ cd web/app && npm install && npm run dev
 ```
 
 Quando a API não responde, a tela cai no `web/app/public/demo.json` e entra em
-**modo demonstração**: no lugar dos filtros, sete recortes já calculados, com
+**modo demonstração**: no lugar dos filtros, oito recortes já calculados, com
 um aviso dizendo que é isso que está no ar. Fichário, grade, marcas e
 impressão funcionam igual — o que muda é só de onde vem o dado.
 
 | Recorte | Mostra |
 | --- | --- |
+| Charizard · masterset | a premissa do projeto: 135 slots em 53 coleções |
 | 151 · Kanto · arte especial | o recorte que motivou o projeto: 21 slots |
 | 151 · masterset inteiro | 362 slots, a coleção toda em português |
 | Escuridão Absoluta | coleção recente, 100% catalogada e com scan |
@@ -427,7 +458,7 @@ para quem baixou o `.zip` e para hospedagem estática — a Vercel não tem
 Postgres. Regerar depois de mexer no catálogo:
 
 ```bash
-python -m ingest snapshot            # ~1 MB em web/app/public/demo.json
+python -m ingest snapshot            # ~1,1 MB em web/app/public/demo.json
 ```
 
 Os recortes moram em `api/snapshot.py` e o payload de cada um sai da **mesma
@@ -459,7 +490,7 @@ pytest          # 95 testes, sem rede e sem banco
 ruff check .
 
 VASTER_TEST_DSN=postgresql://vaster:vaster@localhost:5432/vaster pytest
-#               104 testes: os 9 que faltam conferem o SQL contra o Postgres
+#               106 testes: os 11 que faltam conferem o SQL contra o Postgres
 
 cd web/app && npx tsc -b && npx oxlint
 ```

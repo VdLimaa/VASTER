@@ -35,6 +35,12 @@ PARAMS = {
     "species": None,
     "kinds": None,
     "status": None,
+    "serie": None,
+    "rarities": None,
+    "ano_de": None,
+    "ano_ate": None,
+    "busca": None,
+    "limite": 10,
 }
 
 

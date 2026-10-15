@@ -1,7 +1,11 @@
 -- As coleções disponíveis para montar binder, com quantos slots cada uma tem
 -- no recorte pedido. Alimenta a lista de "escolha o set do seu masterset".
 --
--- Parâmetros: %(region)s, %(languages)s, %(include_digital)s (null = sem filtro)
+-- Os mesmos filtros do binder valem aqui: a lista mostra só coleção que
+-- sobrevive ao recorte inteiro. Coleção com 0 slot no recorte não aparece.
+--
+-- Parâmetros: %(region)s, %(species)s, %(serie)s, %(rarities)s, %(ano_de)s,
+-- %(ano_ate)s, %(kinds)s, %(languages)s, %(include_digital)s — null = sem filtro.
 
 select cs.tcgdex_id as set_id,
        coalesce(cs.name_pt, cs.name_en) as set_name,
@@ -19,6 +23,15 @@ where (%(languages)s::lang[] is null or v.language = any (%(languages)s::lang[])
   and (%(region)s::text is null or exists (
         select 1 from card_species csp join species s on s.id = csp.species_id
         where csp.card_id = c.id and s.region = %(region)s))
+  and (%(species)s::text is null or exists (
+        select 1 from card_species csp join species s on s.id = csp.species_id
+        where csp.card_id = c.id and s.slug = %(species)s))
+  and (%(serie)s::text is null or cs.serie_name = %(serie)s)
+  and (%(rarities)s::text[] is null
+       or coalesce(c.rarity_pt, c.rarity_en) = any (%(rarities)s::text[]))
+  and (%(ano_de)s::int is null or extract(year from cs.release_date) >= %(ano_de)s)
+  and (%(ano_ate)s::int is null or extract(year from cs.release_date) <= %(ano_ate)s)
+  and (%(kinds)s::variant_kind[] is null or v.kind = any (%(kinds)s::variant_kind[]))
 group by cs.id, cs.tcgdex_id, cs.name_pt, cs.name_en, cs.serie_name,
          cs.release_date, cs.region, cs.symbol_url, cs.logo_url,
          cs.count_official, cs.pt_release

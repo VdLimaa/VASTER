@@ -72,9 +72,20 @@ else
     docker compose up -d db
     "$VPY" -m ingest ping --espera 90 || falha "O container subiu mas o Postgres não respondeu em 90s. Olhe 'docker compose logs db'"
   else
-    falha "Nenhum Postgres respondendo e o Docker não está disponível.
-  Saída 1: instale o Docker e rode de novo — o docker-compose.yml já tem o banco pronto.
-  Saída 2: use um Postgres 16 que você já tenha e aponte a variável:
+    falha "Nenhum Postgres respondendo, e o Docker não está disponível.
+
+  Saída 1 — Docker instalado: suba o serviço e rode isto de novo. O
+    docker-compose.yml deste repositório já tem o banco pronto.
+
+  Saída 2 — Postgres nativo, sem Docker. Instale o 16 e crie o usuário e o
+    banco que o projeto espera:
+
+      sudo -u postgres psql \\
+        -c \"create role vaster login password 'vaster' createdb\" \\
+        -c 'create database vaster owner vaster'
+
+  Saída 3 — já tem um Postgres 16: aponte a variável e rode de novo.
+
       export VASTER_DB_DSN=postgresql://usuario:senha@localhost:5432/vaster"
   fi
 fi

@@ -34,12 +34,22 @@ class Recorte:
     idioma: str
     colecao: str | None = None
     regiao: str | None = None
+    especie: str | None = None
     tipo: str | None = None
 
 
 # Português primeiro, que é o ponto do projeto. Cada recorte existe para
 # mostrar uma coisa diferente, e a nota diz qual.
 RECORTES: tuple[Recorte, ...] = (
+    Recorte(
+        chave="charizard",
+        nome="Charizard · masterset",
+        nota="A premissa do projeto: todo slot de Charizard em português, nas "
+        "53 coleções em que ele aparece — das de 1999, que o catálogo não "
+        "tem em português, às de agora.",
+        idioma="pt",
+        especie="charizard",
+    ),
     Recorte(
         chave="151-kanto-arte",
         nome="151 · Kanto · arte especial",
@@ -109,10 +119,13 @@ def gerar(conn, recortes: tuple[Recorte, ...] = RECORTES) -> dict:
     for r in recortes:
         dados = consultas.binder(
             conn,
-            set_id=r.colecao,
-            region=r.regiao,
-            tipo=[r.tipo] if r.tipo else None,
-            idiomas=[r.idioma],
+            consultas.Recorte(
+                idioma=[r.idioma],
+                colecao=r.colecao,
+                regiao=r.regiao,
+                especie=r.especie,
+                tipo=[r.tipo] if r.tipo else None,
+            ),
         )
         if not dados["slots"]:
             continue

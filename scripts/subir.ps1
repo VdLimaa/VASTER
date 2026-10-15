@@ -118,12 +118,27 @@ if ((Codigo $vpy @("-m", "ingest", "ping")) -eq 0) {
     Rode $vpy @("-m", "ingest", "ping", "--espera", "90")
   } else {
     Falha @"
-Nenhum Postgres respondendo e o Docker Desktop nao esta no ar.
-  Saida 1: abra o Docker Desktop (ou instale com
-           winget install Docker.DockerDesktop) e rode de novo. O
-           docker-compose.yml deste repositorio ja tem o banco pronto.
-  Saida 2: use um Postgres 16 que voce ja tenha, e aponte a variavel:
-           `$env:VASTER_DB_DSN = "postgresql://usuario:senha@localhost:5432/vaster"
+Nenhum Postgres respondendo, e o Docker Desktop nao esta no ar.
+
+  Saida 1 - Docker ja instalado: abra o Docker Desktop, espere a baleia
+    ficar verde e rode isto de novo. O docker-compose.yml ja tem o banco.
+
+  Saida 2 - Postgres nativo, sem Docker (roda como servico do Windows,
+    sobe sozinho com a maquina):
+
+      winget install PostgreSQL.PostgreSQL.16
+
+    Depois crie o usuario e o banco que o projeto espera - ele vai pedir a
+    senha do superusuario que voce escolheu na instalacao:
+
+      & "C:\Program Files\PostgreSQL\16\bin\psql.exe" -U postgres ``
+        -c "create role vaster login password 'vaster' createdb" ``
+        -c "create database vaster owner vaster"
+
+  Saida 3 - ja tem um Postgres 16 em algum lugar: aponte a variavel e rode
+    de novo.
+
+      `$env:VASTER_DB_DSN = "postgresql://usuario:senha@localhost:5432/vaster"
 "@
   }
 }

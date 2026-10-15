@@ -1,5 +1,6 @@
-import type { Colecao, Idioma, Opcao } from "../api";
+import type { Colecao, Especie, Facetas, Idioma, Opcao, Recorte } from "../api";
 import { GRADES, type Grade } from "../grades";
+import { BuscaEspecie } from "./BuscaEspecie";
 
 function Chips({
   itens, atual, aoEscolher, comNulo, rotuloNulo,
@@ -31,24 +32,52 @@ function Chips({
           onClick={() => aoEscolher(atual === i.valor && comNulo ? null : i.valor)}
         >
           {i.nome}
-          {(i.slots ?? i.especies) != null && (
-            <span className="n">{i.slots ?? i.especies}</span>
-          )}
+          {i.slots != null && <span className="n">{i.slots}</span>}
         </button>
       ))}
     </>
   );
 }
 
+/** Select com contagem no rótulo. Era, ano e raridade têm valores demais
+ *  para chip — a 151 sozinha tem 8 raridades, o catálogo inteiro tem 32. */
+function Escolha({
+  itens, atual, aoEscolher, rotuloNulo, sufixo,
+}: {
+  itens: Opcao[];
+  atual: string | null;
+  aoEscolher: (v: string | null) => void;
+  rotuloNulo: string;
+  sufixo?: string;
+}) {
+  return (
+    <select
+      value={atual ?? ""}
+      onChange={(e) => aoEscolher(e.target.value || null)}
+      disabled={itens.length === 0}
+    >
+      <option value="">{rotuloNulo}</option>
+      {itens.map((i) => (
+        <option key={i.valor} value={i.valor}>
+          {i.nome}
+          {i.slots != null ? ` (${i.slots}${sufixo ?? ""})` : ""}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function Filtros({
-  idiomas, regioes, tipos, colecoes, estado, aoMudar, busca, aoBuscar, aoLimpar,
+  idiomas, facetas, colecoes, especie, estado, aoMudar, aoEscolherEspecie,
+  busca, aoBuscar, aoLimpar,
 }: {
   idiomas: Opcao[];
-  regioes: Opcao[];
-  tipos: Opcao[];
+  facetas: Facetas;
   colecoes: Colecao[];
-  estado: { idioma: Idioma; regiao: string | null; tipo: string | null; colecao: string | null; grade: Grade };
-  aoMudar: (p: Partial<{ idioma: Idioma; regiao: string | null; tipo: string | null; colecao: string | null; grade: Grade }>) => void;
+  especie: Especie | null;
+  estado: Recorte & { grade: Grade };
+  aoMudar: (p: Partial<Recorte & { grade: Grade }>) => void;
+  aoEscolherEspecie: (e: Especie | null) => void;
   busca: string;
   aoBuscar: (v: string) => void;
   aoLimpar: () => void;
@@ -63,26 +92,66 @@ export function Filtros({
           aoEscolher={(v) => v && aoMudar({ idioma: v as Idioma })}
         />
       </div>
+
+      <div className="grupo">
+        <span className="rotulo">Pokémon</span>
+        <BuscaEspecie escolhida={especie} aoEscolher={aoEscolherEspecie} />
+      </div>
+
       <div className="grupo">
         <span className="rotulo">Região</span>
         <Chips
-          itens={regioes}
+          itens={facetas.regioes}
           atual={estado.regiao}
           aoEscolher={(v) => aoMudar({ regiao: v })}
           comNulo
           rotuloNulo="Todas as regiões"
         />
       </div>
+
+      <div className="grupo">
+        <span className="rotulo">Era e ano</span>
+        <Escolha
+          itens={facetas.eras}
+          atual={estado.era}
+          aoEscolher={(v) => aoMudar({ era: v })}
+          rotuloNulo="Todas as eras"
+        />
+        <Escolha
+          itens={facetas.anos}
+          atual={estado.anoDe != null ? String(estado.anoDe) : null}
+          aoEscolher={(v) => aoMudar({ anoDe: v ? Number(v) : null })}
+          rotuloNulo="De qualquer ano"
+        />
+        <Escolha
+          itens={facetas.anos}
+          atual={estado.anoAte != null ? String(estado.anoAte) : null}
+          aoEscolher={(v) => aoMudar({ anoAte: v ? Number(v) : null })}
+          rotuloNulo="Até hoje"
+        />
+      </div>
+
+      <div className="grupo">
+        <span className="rotulo">Raridade</span>
+        <Escolha
+          itens={facetas.raridades}
+          atual={estado.raridade}
+          aoEscolher={(v) => aoMudar({ raridade: v })}
+          rotuloNulo="Todas as raridades"
+        />
+      </div>
+
       <div className="grupo">
         <span className="rotulo">Tipo</span>
         <Chips
-          itens={tipos}
+          itens={facetas.tipos}
           atual={estado.tipo}
           aoEscolher={(v) => aoMudar({ tipo: v })}
           comNulo
           rotuloNulo="Todos os tipos"
         />
       </div>
+
       <div className="grupo">
         <span className="rotulo">Grade</span>
         {GRADES.map((g) => (
@@ -97,6 +166,7 @@ export function Filtros({
           </button>
         ))}
       </div>
+
       <div className="grupo">
         <span className="rotulo">Coleção</span>
         <input
@@ -110,6 +180,7 @@ export function Filtros({
           Limpar recorte
         </button>
       </div>
+
       <div className="colecoes">
         {colecoes.length === 0 ? (
           <div style={{ padding: 14, color: "var(--fg-mute)" }}>
@@ -135,9 +206,9 @@ export function Filtros({
                 </span>
               </span>
               <span className="cnt">
-                {c.slots} slots
+                {c.slots} {c.slots === 1 ? "slot" : "slots"}
                 <br />
-                {c.cartas} cartas
+                {c.cartas} {c.cartas === 1 ? "carta" : "cartas"}
               </span>
             </button>
           ))

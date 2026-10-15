@@ -11,6 +11,10 @@
 --   %(set_id)s           tcgdex_id da coleção
 --   %(region)s           região da espécie: kanto, johto, hoenn...
 --   %(species)s          slug da espécie
+--   %(serie)s            era/série: 'Scarlet & Violet'
+--   %(rarities)s         raridades: {"Illustration rare"}
+--   %(ano_de)s           ano de lançamento da coleção, mínimo
+--   %(ano_ate)s          ano de lançamento da coleção, máximo
 --   %(kinds)s            tipos de slot: {full_art,alt_art}
 --   %(languages)s        idiomas: {pt}
 --   %(status)s           status na coleção: {owned,wanted}
@@ -74,6 +78,17 @@ where (%(set_id)s::text is null or cs.tcgdex_id = %(set_id)s)
   and (%(species)s::text is null or exists (
         select 1 from card_species csp join species s on s.id = csp.species_id
         where csp.card_id = c.id and s.slug = %(species)s))
+  and (%(serie)s::text is null or cs.serie_name = %(serie)s)
+  -- A raridade sai do mesmo coalesce que a tela mostra: filtrar por uma
+  -- coluna e exibir outra daria chip que não bate com o que está na carta.
+  and (%(rarities)s::text[] is null
+       or coalesce(c.rarity_pt, c.rarity_en) = any (%(rarities)s::text[]))
+  -- Coleção sem data fica de fora de qualquer recorte por ano: não dá para
+  -- afirmar que ela está dentro nem fora.
+  and (%(ano_de)s::int is null
+       or extract(year from cs.release_date) >= %(ano_de)s)
+  and (%(ano_ate)s::int is null
+       or extract(year from cs.release_date) <= %(ano_ate)s)
   and (%(kinds)s::variant_kind[] is null or v.kind = any (%(kinds)s::variant_kind[]))
   and (%(languages)s::lang[] is null or v.language = any (%(languages)s::lang[]))
   and (%(status)s::slot_status[] is null or ci.status = any (%(status)s::slot_status[]))

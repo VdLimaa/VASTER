@@ -3,11 +3,79 @@
 
 export type Idioma = "pt" | "en" | "ja";
 
+/** Os filtros da tela. É o mesmo conjunto que `api/consultas.py:Recorte`
+ *  espera — as três rotas de recorte leem todos eles. */
+export interface Recorte {
+  idioma: Idioma;
+  colecao: string | null;
+  regiao: string | null;
+  especie: string | null;
+  era: string | null;
+  tipo: string | null;
+  raridade: string | null;
+  anoDe: number | null;
+  anoAte: number | null;
+}
+
+export const RECORTE_VAZIO: Omit<Recorte, "idioma"> = {
+  colecao: null,
+  regiao: null,
+  especie: null,
+  era: null,
+  tipo: null,
+  raridade: null,
+  anoDe: null,
+  anoAte: null,
+};
+
+/** Sem nenhum destes a API recusa: seria o catálogo inteiro. */
+export function temEscopo(r: Recorte): boolean {
+  return Boolean(r.colecao || r.regiao || r.especie || r.era);
+}
+
+function params(r: Recorte): URLSearchParams {
+  const q = new URLSearchParams({ idioma: r.idioma });
+  if (r.colecao) q.set("colecao", r.colecao);
+  if (r.regiao) q.set("regiao", r.regiao);
+  if (r.especie) q.set("especie", r.especie);
+  if (r.era) q.set("era", r.era);
+  if (r.tipo) q.set("tipo", r.tipo);
+  if (r.raridade) q.set("raridade", r.raridade);
+  if (r.anoDe != null) q.set("ano_de", String(r.anoDe));
+  if (r.anoAte != null) q.set("ano_ate", String(r.anoAte));
+  return q;
+}
+
 export interface Opcao {
   valor: string;
   nome: string;
   slots?: number;
-  especies?: number;
+  desde?: number | null;
+}
+
+export interface Facetas {
+  eras: Opcao[];
+  anos: Opcao[];
+  raridades: Opcao[];
+  tipos: Opcao[];
+  regioes: Opcao[];
+}
+
+export const FACETAS_VAZIAS: Facetas = {
+  eras: [],
+  anos: [],
+  raridades: [],
+  tipos: [],
+  regioes: [],
+};
+
+export interface Especie {
+  valor: string;
+  nome: string;
+  dex: number;
+  nome_ja: string | null;
+  regiao: string | null;
+  regiao_nome: string | null;
 }
 
 export interface Colecao {
@@ -109,30 +177,23 @@ async function pegar<T>(rota: string): Promise<T> {
 export const api = {
   saude: () => pegar<Saude>("/api/saude"),
   idiomas: () => pegar<Opcao[]>("/api/idiomas"),
-  regioes: () => pegar<Opcao[]>("/api/regioes"),
-  tipos: (colecao?: string | null) =>
-    pegar<Opcao[]>("/api/tipos" + (colecao ? `?colecao=${encodeURIComponent(colecao)}` : "")),
-  colecoes: (p: { idioma: Idioma; regiao?: string | null; busca?: string }) => {
-    const q = new URLSearchParams({ idioma: p.idioma });
-    if (p.regiao) q.set("regiao", p.regiao);
-    if (p.busca) q.set("busca", p.busca);
-    return pegar<Colecao[]>("/api/colecoes?" + q);
-  },
   // Lido do arquivo estático, não da API: é o caminho sem backend. BASE_URL
   // para a tela funcionar também servida de um subdiretório.
   demo: () => pegar<Demo>(`${import.meta.env.BASE_URL}demo.json`),
-  binder: (p: {
-    idioma: Idioma;
-    colecao?: string | null;
-    regiao?: string | null;
-    tipo?: string | null;
-  }) => {
-    const q = new URLSearchParams({ idioma: p.idioma });
-    if (p.colecao) q.set("colecao", p.colecao);
-    if (p.regiao) q.set("regiao", p.regiao);
-    if (p.tipo) q.set("tipo", p.tipo);
-    return pegar<Binder>("/api/binder?" + q);
+  facetas: (r: Recorte) => pegar<Facetas>("/api/facetas?" + params(r)),
+  especies: (busca: string, regiao?: string | null) => {
+    const q = new URLSearchParams({ limite: "12" });
+    if (busca) q.set("busca", busca);
+    if (regiao) q.set("regiao", regiao);
+    return pegar<Especie[]>("/api/especies?" + q);
   },
+  colecoes: (r: Recorte, busca?: string) => {
+    const q = params(r);
+    q.delete("colecao"); // a lista mostra as opções, não a escolhida
+    if (busca) q.set("busca", busca);
+    return pegar<Colecao[]>("/api/colecoes?" + q);
+  },
+  binder: (r: Recorte) => pegar<Binder>("/api/binder?" + params(r)),
 };
 
 // O CDN do TCGdex serve a mesma carta em /low.webp (16 KB) e /high.png
