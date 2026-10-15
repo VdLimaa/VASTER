@@ -4,15 +4,25 @@
 export type Idioma = "pt" | "en" | "ja";
 
 /** Os filtros da tela. É o mesmo conjunto que `api/consultas.py:Recorte`
- *  espera — as três rotas de recorte leem todos eles. */
+ *  espera — as quatro rotas de recorte leem todos eles.
+ *
+ *  Duas palavras que confundem se trocadas: **tipo** é fogo, água, planta,
+ *  como todo mundo usa; **variante** é normal, reverse holo, full art, que é
+ *  o que gera slot. */
 export interface Recorte {
   idioma: Idioma;
   colecao: string | null;
   regiao: string | null;
   especie: string | null;
+  forma: string | null;
   era: string | null;
-  tipo: string | null;
+  variante: string | null;
   raridade: string | null;
+  categoria: string | null;
+  subtipo: string | null;
+  tipo: string | null;
+  sufixo: string | null;
+  estagio: string | null;
   anoDe: number | null;
   anoAte: number | null;
 }
@@ -21,26 +31,52 @@ export const RECORTE_VAZIO: Omit<Recorte, "idioma"> = {
   colecao: null,
   regiao: null,
   especie: null,
+  forma: null,
   era: null,
-  tipo: null,
+  variante: null,
   raridade: null,
+  categoria: null,
+  subtipo: null,
+  tipo: null,
+  sufixo: null,
+  estagio: null,
   anoDe: null,
   anoAte: null,
 };
 
 /** Sem nenhum destes a API recusa: seria o catálogo inteiro. */
 export function temEscopo(r: Recorte): boolean {
-  return Boolean(r.colecao || r.regiao || r.especie || r.era);
+  return Boolean(
+    r.colecao ||
+      r.regiao ||
+      r.especie ||
+      r.era ||
+      r.forma ||
+      r.subtipo ||
+      (r.categoria && r.categoria !== "Pokemon"),
+  );
 }
 
 function params(r: Recorte): URLSearchParams {
   const q = new URLSearchParams({ idioma: r.idioma });
-  if (r.colecao) q.set("colecao", r.colecao);
-  if (r.regiao) q.set("regiao", r.regiao);
-  if (r.especie) q.set("especie", r.especie);
-  if (r.era) q.set("era", r.era);
-  if (r.tipo) q.set("tipo", r.tipo);
-  if (r.raridade) q.set("raridade", r.raridade);
+  const simples: [keyof Recorte, string][] = [
+    ["colecao", "colecao"],
+    ["regiao", "regiao"],
+    ["especie", "especie"],
+    ["forma", "forma"],
+    ["era", "era"],
+    ["variante", "variante"],
+    ["raridade", "raridade"],
+    ["categoria", "categoria"],
+    ["subtipo", "subtipo"],
+    ["tipo", "tipo"],
+    ["sufixo", "sufixo"],
+    ["estagio", "estagio"],
+  ];
+  for (const [campo, nome] of simples) {
+    const v = r[campo];
+    if (v) q.set(nome, String(v));
+  }
   if (r.anoDe != null) q.set("ano_de", String(r.anoDe));
   if (r.anoAte != null) q.set("ano_ate", String(r.anoAte));
   return q;
@@ -53,11 +89,19 @@ export interface Opcao {
   desde?: number | null;
 }
 
+/** As dez listas que a rota de facetas devolve, cada uma contada ignorando
+ *  o próprio filtro. */
 export interface Facetas {
   eras: Opcao[];
   anos: Opcao[];
   raridades: Opcao[];
+  variantes: Opcao[];
+  categorias: Opcao[];
+  subtipos: Opcao[];
   tipos: Opcao[];
+  sufixos: Opcao[];
+  estagios: Opcao[];
+  formas: Opcao[];
   regioes: Opcao[];
 }
 
@@ -65,17 +109,34 @@ export const FACETAS_VAZIAS: Facetas = {
   eras: [],
   anos: [],
   raridades: [],
+  variantes: [],
+  categorias: [],
+  subtipos: [],
   tipos: [],
+  sufixos: [],
+  estagios: [],
+  formas: [],
   regioes: [],
 };
 
-export interface Especie {
+/** Uma linha da Pokédex: o bicho, o sprite, e o recorte que escolhê-lo
+ *  aplica — que muda de forma para forma. */
+export interface EspecieDex {
   valor: string;
   nome: string;
   dex: number;
   nome_ja: string | null;
   regiao: string | null;
   regiao_nome: string | null;
+  sprite: string | null;
+  slots: number;
+  recorte: { especie: string; forma: string | null; estagio: string | null };
+}
+
+export interface Pokedex {
+  dex: string;
+  abas: Opcao[];
+  especies: EspecieDex[];
 }
 
 export interface Colecao {
@@ -116,6 +177,12 @@ export interface Slot {
   no_catalogo: boolean;
   especies: string[] | null;
   regioes: string[] | null;
+  forma: string | null;
+  categoria: string | null;
+  subtipo: string | null;
+  tipos: string[] | null;
+  sufixo: string | null;
+  estagio: string | null;
 }
 
 export interface Resumo {
@@ -181,11 +248,11 @@ export const api = {
   // para a tela funcionar também servida de um subdiretório.
   demo: () => pegar<Demo>(`${import.meta.env.BASE_URL}demo.json`),
   facetas: (r: Recorte) => pegar<Facetas>("/api/facetas?" + params(r)),
-  especies: (busca: string, regiao?: string | null) => {
-    const q = new URLSearchParams({ limite: "12" });
-    if (busca) q.set("busca", busca);
-    if (regiao) q.set("regiao", regiao);
-    return pegar<Especie[]>("/api/especies?" + q);
+  pokedex: (p: { dex: string; idioma: Idioma; regiao?: string | null; busca?: string }) => {
+    const q = new URLSearchParams({ dex: p.dex, idioma: p.idioma });
+    if (p.regiao) q.set("regiao", p.regiao);
+    if (p.busca) q.set("busca", p.busca);
+    return pegar<Pokedex>("/api/pokedex?" + q);
   },
   colecoes: (r: Recorte, busca?: string) => {
     const q = params(r);

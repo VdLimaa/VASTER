@@ -155,6 +155,42 @@ select:has(option[value=""]:not(:checked)) {
 .paginacao button:disabled { opacity: .4; cursor: default; }
 .paginacao span { font-family: var(--data); font-size: 12px; color: var(--fg-mute); }
 
+/* --- escolher o que colecionar ---
+   Quatro portas de entrada, porque "masterset" quer dizer coisas diferentes
+   para cada colecionador: o bicho, a coleção, a região, o tipo de carta. */
+.modos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+         gap: 8px; }
+.modo { text-align: left; padding: 10px 12px; border-radius: var(--radius);
+        border: 1px solid var(--line); background: var(--surface-2); cursor: pointer;
+        display: flex; flex-direction: column; gap: 2px; color: var(--fg-dim);
+        transition: background .12s, border-color .12s; }
+.modo b { font-family: var(--display); font-size: 14.5px; color: var(--fg); }
+.modo span { font-size: 12px; color: var(--fg-mute); }
+.modo:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.modo[aria-pressed="true"] { background: var(--accent-soft);
+        border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+.chip.limpar { margin-left: auto; }
+
+/* --- a Pokédex --- */
+.pokedex { display: flex; flex-direction: column; gap: 10px;
+           border-top: 1px dashed var(--line); padding-top: 11px; }
+.dex-grade { display: grid; gap: 7px; max-height: 330px; overflow-y: auto;
+             grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+             padding: 3px; border: 1px solid var(--line); border-radius: var(--radius);
+             background: var(--surface-2); }
+.dex-item { display: flex; flex-direction: column; align-items: center; gap: 1px;
+            padding: 7px 4px 8px; border-radius: 9px; cursor: pointer;
+            border: 1px solid transparent; background: var(--surface);
+            color: var(--fg-dim); transition: border-color .12s, background .12s; }
+.dex-item img { width: 72px; height: 72px; image-rendering: pixelated; }
+.dex-item:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.dex-item[aria-pressed="true"] { background: var(--accent-soft);
+            border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+.dex-nome { font-size: 12.5px; font-weight: 600; color: var(--fg); text-align: center;
+            line-height: 1.25; }
+.dex-meta { font-family: var(--data); font-size: 10.5px; color: var(--fg-mute); }
+.dex-aviso { grid-column: 1 / -1; padding: 28px; text-align: center; color: var(--fg-mute); }
+
 /* --- modo demonstração ---
    Sem backend a tela ainda é a tela; o aviso é o que impede alguém de achar
    que o catálogo inteiro são sete recortes. */

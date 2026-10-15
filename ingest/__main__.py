@@ -87,6 +87,10 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--refazer", action="store_true", help="rebusca o que já tem detalhe")
     d.add_argument("--limite", type=int, help="para no N-ésimo (útil para testar)")
 
+    sub.add_parser(
+        "formas",
+        help="preenche card.forma (mega, de Alola, de Galar…) a partir do nome",
+    )
     li = sub.add_parser("links", help="preenche card_species")
     li.add_argument("--species")
     li.add_argument("--all", action="store_true", dest="todas")
@@ -229,6 +233,10 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.cmd == "coverage":
             _coverage(conn)
+            return 0
+
+        if args.cmd == "formas":
+            print(pipeline.marcar_formas(conn))
             return 0
 
         if args.cmd == "saude":

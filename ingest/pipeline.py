@@ -24,6 +24,7 @@ from dataclasses import dataclass
 import psycopg
 
 from .config import Config
+from .formas import forma_da_carta
 from .species import Especie, IndiceEspecies, eh_pokemon
 from .tcgdex import TCGdex, image_url
 from .variants import Carta, Politica, gerar_slots
@@ -84,26 +85,84 @@ def gravar_especies(conn: psycopg.Connection, especies: list[Especie]) -> Result
             cur.execute(
                 """
                 insert into species
-                  (dex_number, slug, name_en, name_pt, name_ja, generation, region)
-                values (%s, %s, %s, %s, %s, %s, %s)
+                  (dex_number, slug, name_en, name_pt, name_ja, generation, region,
+                   sprite_url)
+                values (%s, %s, %s, %s, %s, %s, %s, %s)
                 on conflict (dex_number) do update
                   set slug = excluded.slug,
                       name_en = excluded.name_en,
                       name_pt = excluded.name_pt,
                       name_ja = coalesce(excluded.name_ja, species.name_ja),
                       generation = coalesce(excluded.generation, species.generation),
-                      region = coalesce(excluded.region, species.region)
-                returning (xmax = 0) as novo
+                      region = coalesce(excluded.region, species.region),
+                      sprite_url = coalesce(excluded.sprite_url, species.sprite_url)
+                returning id, (xmax = 0) as novo
                 """,
                 (e.dex_number, e.slug, e.name_en, e.name_pt, e.name_ja,
-                 e.generation, e.region),
+                 e.generation, e.region, e.sprite_url),
             )
             row = cur.fetchone()
             if row and row["novo"]:
                 res.inseridos += 1
             else:
                 res.atualizados += 1
+            for f in e.formas:
+                cur.execute(
+                    """
+                    insert into species_form
+                      (species_id, slug, kind, regiao, name_en, sprite_url)
+                    values (%s, %s, %s, %s, %s, %s)
+                    on conflict (slug) do update
+                      set species_id = excluded.species_id,
+                          kind = excluded.kind,
+                          regiao = excluded.regiao,
+                          name_en = excluded.name_en,
+                          sprite_url = excluded.sprite_url
+                    """,
+                    (row["id"], f.slug, f.kind, f.regiao, f.name_en, f.sprite_url),
+                )
     conn.commit()
+    return res
+
+
+def marcar_formas(conn: psycopg.Connection) -> Resultado:
+    """Preenche `card.forma` a partir do nome da carta.
+
+    A API não tem esse dado: o dexId de 'M Charizard EX' é 6 igual ao do
+    Charizard comum. As regras, e as duas ressalvas que elas carregam, estão
+    em ingest/formas.py.
+    """
+    res = Resultado("formas")
+    with conn.cursor() as cur:
+        cur.execute(
+            "select id, name_en, name_pt, name_ja, category_en, stage_en from card"
+        )
+        cartas = cur.fetchall()
+
+    mudancas = [
+        (forma, c["id"])
+        for c in cartas
+        if (
+            forma := forma_da_carta(
+                name_en=c["name_en"],
+                name_pt=c["name_pt"],
+                name_ja=c["name_ja"],
+                categoria=c["category_en"],
+                estagio=c["stage_en"],
+            )
+        )
+    ]
+    with conn.cursor() as cur:
+        cur.executemany("update card set forma = %s where id = %s", mudancas)
+    conn.commit()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "select forma, count(*) n from card where forma <> 'normal' group by 1 order by n desc"
+        )
+        achados = [f"{r['forma']}={r['n']}" for r in cur.fetchall()]
+    res.atualizados = len(mudancas)
+    res.observacoes.append("formas inferidas do nome: " + (", ".join(achados) or "nenhuma"))
     return res
 
 
@@ -472,6 +531,12 @@ async def _gravar_lote_detalhes(
                   has_ja = %(has_ja)s or card.has_ja,
                   image_url_pt = coalesce(%(image_pt)s, card.image_url_pt),
                   image_url_ja = coalesce(%(image_ja)s, card.image_url_ja),
+                  stage_en = %(stage)s,
+                  suffix_en = %(suffix)s,
+                  trainer_type_en = %(trainer_type)s,
+                  energy_type_en = %(energy_type)s,
+                  types_en = %(types)s,
+                  regulation_mark = %(regulation_mark)s,
                   details_at = now()
                 where tcgdex_id = %(id)s and region = %(region)s
                 """,
@@ -493,6 +558,14 @@ async def _gravar_lote_detalhes(
                     "has_ja": japonesa,
                     "image_pt": image_url((p or {}).get("image")),
                     "image_ja": image_url(d.get("image")) if japonesa else None,
+                    # Classificação da carta. No oeste isto já veio pelo
+                    # GraphQL; no japonês este é o único caminho.
+                    "stage": d.get("stage"),
+                    "suffix": d.get("suffix"),
+                    "trainer_type": d.get("trainerType"),
+                    "energy_type": d.get("energyType"),
+                    "types": d.get("types") or None,
+                    "regulation_mark": d.get("regulationMark"),
                 },
             )
             res.atualizados += cur.rowcount
@@ -529,6 +602,12 @@ async def ingerir_detalhes_bulk(conn: psycopg.Connection, cfg: Config) -> Result
             c.get("illustrator"),
             psycopg.types.json.Jsonb(c.get("variants") or {}),
             c.get("dexId") or None,
+            c.get("stage"),
+            c.get("suffix"),
+            c.get("trainerType"),
+            c.get("energyType"),
+            c.get("types") or None,
+            c.get("regulationMark"),
             c["id"],
         )
         for c in cartas
@@ -543,6 +622,12 @@ async def ingerir_detalhes_bulk(conn: psycopg.Connection, cfg: Config) -> Result
               illustrator = coalesce(%s, card.illustrator),
               api_variants = %s,
               api_dex_id = %s,
+              stage_en = %s,
+              suffix_en = %s,
+              trainer_type_en = %s,
+              energy_type_en = %s,
+              types_en = %s,
+              regulation_mark = %s,
               details_at = now()
             where tcgdex_id = %s and region = 'west'
             """,
@@ -647,6 +732,8 @@ async def atualizar(
     )
 
     passos.append(ligar_especies(conn, todas=True))
+    # A forma sai do nome, então coleção nova precisa passar por aqui também.
+    passos.append(marcar_formas(conn))
     passos.append(gerar(conn, cfg, todas=True))
 
     depois = _retrato(conn)

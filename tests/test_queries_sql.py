@@ -41,6 +41,15 @@ PARAMS = {
     "ano_ate": None,
     "busca": None,
     "limite": 10,
+    "forma": None,
+    "categoria": None,
+    "trainer_type": None,
+    "tipos": None,
+    "sufixo": None,
+    "estagio": None,
+    "forma_kind": None,
+    "card_forma": None,
+    "card_estagio": None,
 }
 
 

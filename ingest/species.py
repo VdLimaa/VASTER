@@ -138,6 +138,21 @@ NOME_REGIAO = {
 
 
 @dataclass(frozen=True)
+class Forma:
+    """Uma variedade da espécie, como a PokéAPI lista em `varieties`.
+
+    É a Pokédex de escolha da tela — megas, formas regionais, Gigantamax.
+    Não confundir com `card.forma`, que é a forma que cada carta mostra.
+    """
+
+    slug: str
+    kind: str
+    regiao: str | None
+    name_en: str
+    sprite_url: str
+
+
+@dataclass(frozen=True)
 class Especie:
     dex_number: int
     slug: str
@@ -146,6 +161,8 @@ class Especie:
     name_ja: str | None = None
     generation: str | None = None
     region: str | None = None
+    sprite_url: str | None = None
+    formas: tuple[Forma, ...] = ()
 
 
 class IndiceEspecies:

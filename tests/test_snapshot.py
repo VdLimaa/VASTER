@@ -32,7 +32,7 @@ def test_todo_recorte_tem_recorte() -> None:
     """Sem coleção, região nem espécie, a rota recusa — o snapshot também não
     deve ter um recorte que puxaria o catálogo inteiro."""
     for r in RECORTES:
-        assert r.colecao or r.regiao or r.especie, f"{r.chave}: recorte vazio"
+        assert r.colecao or r.regiao or r.especie or r.categoria, f"{r.chave}: recorte vazio"
 
 
 def test_nota_explica() -> None:

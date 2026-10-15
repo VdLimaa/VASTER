@@ -15,7 +15,13 @@
 --   %(rarities)s         raridades: {"Illustration rare"}
 --   %(ano_de)s           ano de lançamento da coleção, mínimo
 --   %(ano_ate)s          ano de lançamento da coleção, máximo
---   %(kinds)s            tipos de slot: {full_art,alt_art}
+--   %(kinds)s            variantes do slot: {full_art,alt_art}
+--   %(forma)s            forma do Pokémon: mega, alola, galar, hisui, paldea
+--   %(categoria)s        Pokemon, Trainer ou Energy
+--   %(trainer_type)s     Item, Supporter, Stadium, Tool
+--   %(tipos)s            tipo de energia da carta: {Fire,Water}
+--   %(sufixo)s           EX, GX, V, VMAX, VSTAR, ex
+--   %(estagio)s          Basic, Stage1, Stage2, VMAX, VSTAR, MEGA
 --   %(languages)s        idiomas: {pt}
 --   %(status)s           status na coleção: {owned,wanted}
 --   %(include_absent)s   inclui slots marcados como inexistentes
@@ -36,6 +42,12 @@ select
   c.name_en                     as card_name_en,
   coalesce(c.rarity_pt, c.rarity_en) as rarity,
   c.rarity_en                   as rarity_en,
+  c.forma                       as forma,
+  c.category_en                 as categoria,
+  c.trainer_type_en             as subtipo,
+  c.types_en                    as tipos,
+  c.suffix_en                   as sufixo,
+  c.stage_en                    as estagio,
   v.kind                        as kind,
   v.language                    as language,
   v.exists_state                as exists_state,
@@ -90,6 +102,14 @@ where (%(set_id)s::text is null or cs.tcgdex_id = %(set_id)s)
   and (%(ano_ate)s::int is null
        or extract(year from cs.release_date) <= %(ano_ate)s)
   and (%(kinds)s::variant_kind[] is null or v.kind = any (%(kinds)s::variant_kind[]))
+  -- A forma é inferida do nome da carta; ver ingest/formas.py.
+  and (%(forma)s::text is null or c.forma = %(forma)s)
+  and (%(categoria)s::text is null or c.category_en = %(categoria)s)
+  and (%(trainer_type)s::text is null or c.trainer_type_en = %(trainer_type)s)
+  -- && e não = : uma carta pode ter dois tipos de energia.
+  and (%(tipos)s::text[] is null or c.types_en && %(tipos)s::text[])
+  and (%(sufixo)s::text is null or c.suffix_en = %(sufixo)s)
+  and (%(estagio)s::text is null or c.stage_en = %(estagio)s)
   and (%(languages)s::lang[] is null or v.language = any (%(languages)s::lang[]))
   and (%(status)s::slot_status[] is null or ci.status = any (%(status)s::slot_status[]))
   and (%(include_absent)s or v.exists_state <> 'absent')

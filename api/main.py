@@ -14,7 +14,7 @@ from __future__ import annotations
 import pathlib
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -64,6 +64,29 @@ def rota_facetas(conn: Conn, recorte: Annotated[consultas.Recorte, Depends()]) -
     return consultas.facetas(conn, recorte)
 
 
+@app.get("/api/pokedex")
+def rota_pokedex(
+    conn: Conn,
+    dex: str = "especie",
+    regiao: str | None = None,
+    idioma: Annotated[list[str] | None, Query()] = None,
+    busca: str | None = None,
+) -> dict:
+    """A Pokédex para escolher o masterset.
+
+    `dex` escolhe qual: `especie` (as 1.025), `mega`, `regional`,
+    `gigantamax` ou `primal`. Cada linha traz o sprite, a contagem de slots
+    no idioma pedido e o recorte que escolhê-la aplica.
+    """
+    return {
+        "dex": dex,
+        "abas": [{"valor": k, "nome": v["nome"]} for k, v in consultas.POKEDEX.items()],
+        "especies": consultas.pokedex(
+            conn, dex=dex, regiao=regiao, idiomas=idioma, busca=busca
+        ),
+    }
+
+
 @app.get("/api/especies")
 def rota_especies(
     conn: Conn,
@@ -100,7 +123,8 @@ def rota_binder(
     if not recorte.tem_escopo():
         raise HTTPException(
             status_code=400,
-            detail="Escolha pelo menos uma coleção, região, espécie ou era.",
+            detail="Escolha pelo menos um Pokémon, coleção, região, era, forma "
+            "ou tipo de carta.",
         )
     return consultas.binder(conn, recorte, user_id=usuario)
 

@@ -32,6 +32,12 @@ where (%(languages)s::lang[] is null or v.language = any (%(languages)s::lang[])
   and (%(ano_de)s::int is null or extract(year from cs.release_date) >= %(ano_de)s)
   and (%(ano_ate)s::int is null or extract(year from cs.release_date) <= %(ano_ate)s)
   and (%(kinds)s::variant_kind[] is null or v.kind = any (%(kinds)s::variant_kind[]))
+  and (%(forma)s::text is null or c.forma = %(forma)s)
+  and (%(categoria)s::text is null or c.category_en = %(categoria)s)
+  and (%(trainer_type)s::text is null or c.trainer_type_en = %(trainer_type)s)
+  and (%(tipos)s::text[] is null or c.types_en && %(tipos)s::text[])
+  and (%(sufixo)s::text is null or c.suffix_en = %(sufixo)s)
+  and (%(estagio)s::text is null or c.stage_en = %(estagio)s)
 group by cs.id, cs.tcgdex_id, cs.name_pt, cs.name_en, cs.serie_name,
          cs.release_date, cs.region, cs.symbol_url, cs.logo_url,
          cs.count_official, cs.pt_release

@@ -7,7 +7,6 @@ import {
   type Binder,
   type Colecao,
   type Demo,
-  type Especie,
   type Facetas,
   type Opcao,
   type Recorte,
@@ -17,6 +16,7 @@ import { Fichario } from "./componentes/Fichario";
 import { GRADES, type Grade, totalAberturas } from "./grades";
 import { Demonstracao } from "./componentes/Demonstracao";
 import { Filtros } from "./componentes/Filtros";
+import { type Modo } from "./modos";
 import { Resumo } from "./componentes/Resumo";
 import { alternar, carregar, salvar, type Marca } from "./marcas";
 
@@ -27,7 +27,7 @@ type Estado = Recorte & { grade: Grade };
  * estático e oferece só os recortes gravados — ver `api/snapshot.py`. É o que
  * faz `npm run dev` valer a pena sozinho, sem Postgres e sem Python.
  */
-type Modo = "descobrindo" | "api" | "demo" | "nada";
+type Fonte = "descobrindo" | "api" | "demo" | "nada";
 
 const INICIAL: Estado = {
   idioma: "pt", // português é o padrão: é o ponto do projeto
@@ -41,14 +41,19 @@ export default function App() {
   const [idiomas, setIdiomas] = useState<Opcao[]>([]);
   const [facetas, setFacetas] = useState<Facetas>(FACETAS_VAZIAS);
   const [colecoes, setColecoes] = useState<Colecao[]>([]);
-  const [especie, setEspecie] = useState<Especie | null>(null);
+  const [nomeEspecie, setNomeEspecie] = useState<string | null>(null);
+  const [modo, setModo] = useState<Modo>("pokemon");
+  // Limpar o recorte também zera a busca e a aba da Pokédex, que são estado
+  // dela. Trocar a key remonta o componente — mais simples e mais confiável
+  // que um efeito espelhando prop em estado.
+  const [limpezas, setLimpezas] = useState(0);
   const [binder, setBinder] = useState<Binder | null>(null);
   const [saude, setSaude] = useState<Saude | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [abertura, setAbertura] = useState(0);
   const [marcas, setMarcas] = useState<Record<string, Marca>>(() => carregar());
-  const [modo, setModo] = useState<Modo>("descobrindo");
+  const [fonte, setFonte] = useState<Fonte>("descobrindo");
   const [demo, setDemo] = useState<Demo | null>(null);
   const [escolhido, setEscolhido] = useState<string | null>(null);
 
@@ -59,7 +64,7 @@ export default function App() {
     let vivo = true;
     api
       .saude()
-      .then((s) => vivo && (setSaude(s), setModo("api")))
+      .then((s) => vivo && (setSaude(s), setFonte("api")))
       .catch(() =>
         api
           .demo()
@@ -67,9 +72,9 @@ export default function App() {
             if (!vivo) return;
             setDemo(d);
             setEscolhido(d.recortes[0]?.chave ?? null);
-            setModo("demo");
+            setFonte("demo");
           })
-          .catch(() => vivo && setModo("nada")),
+          .catch(() => vivo && setFonte("nada")),
       );
     return () => {
       vivo = false;
@@ -77,15 +82,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (modo !== "api") return;
+    if (fonte !== "api") return;
     api.idiomas().then(setIdiomas).catch(() => setIdiomas([]));
-  }, [modo]);
+  }, [fonte]);
 
   // As facetas e a lista de coleções seguem o recorte inteiro: mostrar um
   // filtro que não filtra nada é pior que não mostrar. Uma requisição para as
   // cinco listas — ver db/queries/facetas.sql.
   useEffect(() => {
-    if (modo !== "api") return;
+    if (fonte !== "api") return;
     let cancelado = false;
     const t = setTimeout(() => {
       api
@@ -97,10 +102,10 @@ export default function App() {
       cancelado = true;
       clearTimeout(t);
     };
-  }, [modo, recorte]);
+  }, [fonte, recorte]);
 
   useEffect(() => {
-    if (modo !== "api") return;
+    if (fonte !== "api") return;
     let cancelado = false;
     const t = setTimeout(() => {
       api
@@ -112,14 +117,14 @@ export default function App() {
       cancelado = true;
       clearTimeout(t);
     };
-  }, [modo, recorte, busca]);
+  }, [fonte, recorte, busca]);
 
   // Derivado, não estado: ter recorte é uma leitura do que já está no
   // recorte, e calcular no render evita um setState dentro do efeito.
   const temRecorte = temEscopo(recorte);
 
   useEffect(() => {
-    if (modo !== "api" || !temRecorte) return;
+    if (fonte !== "api" || !temRecorte) return;
     let cancelado = false;
     // O lint reclama de setState dentro de efeito, mas aqui é exatamente o
     // caso que ele mesmo descreve como legítimo: sincronizar com um sistema
@@ -140,7 +145,7 @@ export default function App() {
     return () => {
       cancelado = true;
     };
-  }, [modo, temRecorte, recorte]);
+  }, [fonte, temRecorte, recorte]);
 
   const mudar = useCallback((p: Partial<Estado>) => {
     setRecorte((r) => ({ ...r, ...p }));
@@ -160,7 +165,7 @@ export default function App() {
   // sabem de onde veio o dado.
   const recortePronto = demo?.recortes.find((r) => r.chave === escolhido) ?? null;
   // Sem recorte, nada do binder anterior aparece — nem por um quadro.
-  const dados: Binder | null = modo === "demo" ? recortePronto : temRecorte ? binder : null;
+  const dados: Binder | null = fonte === "demo" ? recortePronto : temRecorte ? binder : null;
   const slots = dados?.slots ?? [];
   const aberturas = useMemo(
     () => (slots.length ? totalAberturas(slots.length, recorte.grade) : 0),
@@ -188,18 +193,31 @@ export default function App() {
       ? `${recorte.anoDe}–${recorte.anoAte}`
       : (recorte.anoDe ?? recorte.anoAte ?? null);
   const titulo =
-    modo === "demo"
+    fonte === "demo"
       ? (recortePronto?.nome ?? "")
       : binder
         ? [
-            especie?.nome,
+            nomeEspecie,
             recorte.colecao ? colecoes.find((c) => c.set_id === recorte.colecao)?.set_name : null,
             recorte.era,
             recorte.regiao ? facetas.regioes.find((r) => r.valor === recorte.regiao)?.nome : null,
+            recorte.categoria
+              ? facetas.categorias.find((c) => c.valor === recorte.categoria)?.nome
+              : null,
+            recorte.subtipo
+              ? facetas.subtipos.find((s) => s.valor === recorte.subtipo)?.nome
+              : null,
+            recorte.tipo ? facetas.tipos.find((t) => t.valor === recorte.tipo)?.nome : null,
             recorte.raridade
               ? facetas.raridades.find((r) => r.valor === recorte.raridade)?.nome
               : null,
-            recorte.tipo ? facetas.tipos.find((t) => t.valor === recorte.tipo)?.nome : null,
+            recorte.sufixo,
+            recorte.estagio
+              ? facetas.estagios.find((e) => e.valor === recorte.estagio)?.nome
+              : null,
+            recorte.variante
+              ? facetas.variantes.find((v) => v.valor === recorte.variante)?.nome
+              : null,
             anos,
           ]
             .filter(Boolean)
@@ -215,7 +233,7 @@ export default function App() {
           ` · ${contagem.slots.toLocaleString("pt-BR")} slots em ${contagem.colecoes} coleções`}
       </p>
 
-      {modo === "demo" && demo ? (
+      {fonte === "demo" && demo ? (
         <Demonstracao
           demo={demo}
           escolhido={escolhido}
@@ -231,19 +249,23 @@ export default function App() {
           idiomas={idiomas}
           facetas={facetas}
           colecoes={colecoes}
-          especie={especie}
           estado={recorte}
+          modo={modo}
+          aoTrocarModo={setModo}
           aoMudar={mudar}
-          aoEscolherEspecie={(e) => {
-            setEspecie(e);
-            mudar({ especie: e?.valor ?? null });
+          nomeEspecie={nomeEspecie}
+          limpezas={limpezas}
+          aoEscolherEspecie={(p, nome) => {
+            setNomeEspecie(nome || null);
+            mudar(p);
           }}
           busca={busca}
           aoBuscar={setBusca}
           aoLimpar={() => {
             setRecorte({ ...INICIAL, idioma: recorte.idioma, grade: recorte.grade });
-            setEspecie(null);
+            setNomeEspecie(null);
             setBusca("");
+            setLimpezas((n) => n + 1);
           }}
         />
       )}
@@ -256,9 +278,9 @@ export default function App() {
               <strong>Não deu</strong>
               {erro}
             </div>
-          ) : carregando || modo === "descobrindo" ? (
+          ) : carregando || fonte === "descobrindo" ? (
             <div className="vaziao">Carregando…</div>
-          ) : modo === "nada" ? (
+          ) : fonte === "nada" ? (
             <div className="vaziao">
               <strong>Nem a API nem o snapshot responderam</strong>
               Suba o banco e a API com <code>scripts\subir.bat</code> (Windows) ou{" "}
@@ -268,8 +290,9 @@ export default function App() {
           ) : !dados ? (
             <div className="vaziao">
               <strong>Escolha um recorte</strong>
-              Um Pokémon, uma coleção, uma região ou uma era — e combine à vontade: Kanto
-              dentro da 151, ou todo Charizard em português de 1999 a 2010.
+              Escolha um Pokémon na Pokédex, uma coleção, uma região ou um tipo de carta —
+              e combine à vontade: Mega Charizard em português, só as cartas de apoiador da
+              151, ou todo Pikachu de 1999 a 2005.
             </div>
           ) : slots.length === 0 ? (
             <div className="vaziao">
@@ -318,7 +341,7 @@ export default function App() {
 
       <div className="rodape nao-imprime">
         <p>
-          {modo === "demo"
+          {fonte === "demo"
             ? "Dado de um snapshot estático, sem backend no ar."
             : "Dado do seu Postgres, servido por uvicorn api.main:app."}{" "}
           As imagens vêm por hotlink do CDN do TCGdex — nenhuma carta é rehospedada.

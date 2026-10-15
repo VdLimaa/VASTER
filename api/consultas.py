@@ -13,6 +13,7 @@ from typing import Annotated, Any
 from fastapi import Query
 
 from ingest.db import query
+from ingest.formas import ROTULO as FORMA_PT
 from ingest.species import NOME_REGIAO
 
 # Agrupa os tipos de slot como o colecionador pensa. A chave é o que vai na
@@ -37,6 +38,48 @@ IDIOMAS = {
 # Raridade a tela mostra como o catálogo escreve, traduzindo só o que tem
 # tradução exata. 'Holo Rare' e 'Rare Holo' são dois valores diferentes no
 # TCGdex, de eras diferentes — juntar os dois num rótulo só esconderia isso.
+# A carta pode ser Pokémon, treinador ou energia — e treinador tem subtipo.
+# É o eixo "o que a carta É", separado de "que Pokémon ela mostra".
+CATEGORIA_PT = {"Pokemon": "Pokémon", "Trainer": "Treinador", "Energy": "Energia"}
+
+SUBTIPO_PT = {
+    "Item": "Item",
+    "Supporter": "Apoiador",
+    "Stadium": "Estádio",
+    "Tool": "Ferramenta",
+    "Technical Machine": "Máquina Técnica",
+    "Rocket's Secret Machine": "Máquina Secreta da Rocket",
+    "Ace Spec": "ACE SPEC",
+}
+
+# 'Tipo' para quem joga é isto: fogo, água, planta. O que o enum chama de
+# tipo de slot (normal, RF, full art) a tela chama de variante.
+TIPO_PT = {
+    "Grass": "Planta",
+    "Fire": "Fogo",
+    "Water": "Água",
+    "Lightning": "Elétrico",
+    "Psychic": "Psíquico",
+    "Fighting": "Lutador",
+    "Darkness": "Escuridão",
+    "Metal": "Metálico",
+    "Fairy": "Fada",
+    "Dragon": "Dragão",
+    "Colorless": "Incolor",
+}
+
+ESTAGIO_PT = {
+    "Basic": "Básico",
+    "Stage1": "Estágio 1",
+    "Stage2": "Estágio 2",
+    "RESTORED": "Restaurado",
+    "LEVEL-UP": "Nível X",
+    "VMAX": "VMAX",
+    "VSTAR": "VSTAR",
+    "MEGA": "MEGA",
+    "BREAK": "BREAK",
+}
+
 RARIDADE_PT = {
     "Common": "Comum",
     "Uncommon": "Incomum",
@@ -59,9 +102,15 @@ class Recorte:
     colecao: str | None = None
     regiao: str | None = None
     especie: str | None = None
+    forma: str | None = None
     era: str | None = None
-    tipo: Annotated[list[str] | None, Query()] = None
+    variante: Annotated[list[str] | None, Query()] = None
     raridade: Annotated[list[str] | None, Query()] = None
+    categoria: str | None = None
+    subtipo: str | None = None
+    tipo: Annotated[list[str] | None, Query()] = None
+    sufixo: str | None = None
+    estagio: str | None = None
     ano_de: int | None = None
     ano_ate: int | None = None
     incluir_absent: bool = False
@@ -74,7 +123,18 @@ class Recorte:
 
     def tem_escopo(self) -> bool:
         """Sem nenhum destes, o recorte seria o catálogo inteiro."""
-        return bool(self.colecao or self.regiao or self.especie or self.era)
+        # 'Treinador' e 'Energia' são masterset de verdade — 4.734 e 846
+        # slots em português. 'Pokémon' sozinho são 29.620: é o catálogo,
+        # não um recorte, e derruba a tela.
+        return bool(
+            self.colecao
+            or self.regiao
+            or self.especie
+            or self.era
+            or self.forma
+            or self.subtipo
+            or (self.categoria and self.categoria != "Pokemon")
+        )
 
     def sql(self, user_id: int | None = None) -> dict[str, Any]:
         return {
@@ -82,11 +142,17 @@ class Recorte:
             "set_id": self.colecao,
             "region": self.regiao,
             "species": self.especie,
+            "forma": self.forma,
             "serie": self.era,
             "rarities": self.raridade or None,
+            "categoria": self.categoria,
+            "trainer_type": self.subtipo,
+            "tipos": self.tipo or None,
+            "sufixo": self.sufixo,
+            "estagio": self.estagio,
             "ano_de": self.ano_de,
             "ano_ate": self.ano_ate,
-            "kinds": kinds_do_grupo(self.tipo),
+            "kinds": kinds_do_grupo(self.variante),
             "languages": self.idiomas,
             "status": None,
             "include_absent": self.incluir_absent,
@@ -203,26 +269,38 @@ def especies(conn, busca: str | None = None, regiao: str | None = None, limite: 
 def facetas(conn, recorte: Recorte) -> dict[str, list[dict]]:
     """O que ainda existe no recorte, por dimensão, com contagem.
 
-    Uma requisição e uma consulta para cinco listas. Cada faceta é contada
-    ignorando o próprio filtro, então trocar de era ou de ano não exige
+    Uma requisição e uma consulta para dez listas. Cada faceta é contada
+    ignorando o próprio filtro, então trocar de era ou de tipo não exige
     limpar o recorte antes — ver o comentário de `db/queries/facetas.sql`.
     """
     with conn.cursor() as cur:
         cur.execute(query("facetas"), recorte.sql())
         linhas = [dict(r) for r in cur.fetchall()]
 
-    por_dim: dict[str, list[dict]] = {d: [] for d in ("era", "ano", "raridade", "tipo", "regiao")}
+    dims = ("era", "ano", "raridade", "variante", "regiao", "categoria",
+            "subtipo", "tipo", "sufixo", "estagio", "forma")
+    por_dim: dict[str, list[dict]] = {d: [] for d in dims}
     for r in linhas:
         por_dim.setdefault(r["dim"], []).append(r)
 
-    # O tipo é o único que não sai pronto: a tela filtra por grupo
+    # A variante é a única que não sai pronta: a tela filtra por grupo
     # ('arte' = alt_art + full_art) e a consulta conta por kind.
-    por_kind = {r["valor"]: r["n"] for r in por_dim["tipo"]}
-    tipos = [
+    por_kind = {r["valor"]: r["n"] for r in por_dim["variante"]}
+    variantes = [
         {"valor": chave, "nome": rotulo, "slots": n}
         for chave, (rotulo, kinds) in GRUPOS_DE_TIPO.items()
         if (n := sum(por_kind.get(k, 0) for k in kinds))
     ]
+
+    def lista(dim: str, rotulos: dict[str, str] | None = None) -> list[dict]:
+        return [
+            {
+                "valor": r["valor"],
+                "nome": (rotulos or {}).get(r["valor"], r["valor"]),
+                "slots": r["n"],
+            }
+            for r in por_dim[dim]
+        ]
 
     return {
         # Era é linha do tempo, não ranking: ordena pelo ano mais antigo.
@@ -234,17 +312,89 @@ def facetas(conn, recorte: Recorte) -> dict[str, list[dict]]:
             {"valor": r["valor"], "nome": r["valor"], "slots": r["n"]}
             for r in sorted(por_dim["ano"], key=lambda r: r["valor"], reverse=True)
         ],
-        "raridades": [
-            {"valor": r["valor"], "nome": RARIDADE_PT.get(r["valor"], r["valor"]), "slots": r["n"]}
-            for r in por_dim["raridade"]
-        ],
-        "tipos": tipos,
+        "raridades": lista("raridade", RARIDADE_PT),
+        "variantes": variantes,
+        "categorias": lista("categoria", CATEGORIA_PT),
+        "subtipos": lista("subtipo", SUBTIPO_PT),
+        "tipos": lista("tipo", TIPO_PT),
+        "sufixos": lista("sufixo"),
+        "estagios": lista("estagio", ESTAGIO_PT),
+        "formas": lista("forma", FORMA_PT),
         "regioes": [
             {
                 "valor": r["valor"],
                 "nome": NOME_REGIAO.get(r["valor"], r["valor"].title()),
                 "slots": r["n"],
             }
-            for r in por_dim["regiao"]
+            for r in sorted(por_dim["regiao"], key=lambda r: (r["ordem"] is None, r["ordem"]))
         ],
     }
+
+
+# A Pokédex de formas: o que cada aba pede ao banco, e o filtro que escolher
+# um bicho ali aplica no fichário. Gigantamax é o caso torto — o TCG não
+# nomeia a forma, a carta dela é a VMAX, e VMAX é estágio.
+POKEDEX = {
+    "especie": {"kind": None, "card_forma": None, "card_estagio": None, "nome": "Pokédex"},
+    "mega": {"kind": "mega", "card_forma": "mega", "card_estagio": None, "nome": "Megas"},
+    "regional": {"kind": "regional", "card_forma": None, "card_estagio": None,
+                 "nome": "Formas regionais"},
+    "gigantamax": {"kind": "gigantamax", "card_forma": None, "card_estagio": "VMAX",
+                   "nome": "Gigantamax"},
+    "primal": {"kind": "primal", "card_forma": "primal", "card_estagio": None,
+               "nome": "Primal"},
+}
+
+
+def pokedex(
+    conn,
+    *,
+    dex: str = "especie",
+    regiao: str | None = None,
+    idiomas: list[str] | None = None,
+    busca: str | None = None,
+) -> list[dict]:
+    """A Pokédex para escolher o masterset: espécie, sprite e quantos slots.
+
+    Cada linha já vem com o recorte que escolhê-la aplica, porque o filtro
+    muda de forma para forma — mega é `forma=mega`, a de Alola é
+    `forma=alola`, e Gigantamax é `variante` nenhuma, é a carta VMAX.
+    """
+    conf = POKEDEX.get(dex) or POKEDEX["especie"]
+    with conn.cursor() as cur:
+        cur.execute(
+            query("pokedex"),
+            {
+                "region": regiao,
+                "forma_kind": conf["kind"],
+                "card_forma": conf["card_forma"],
+                "card_estagio": conf["card_estagio"],
+                "languages": idiomas or ["pt"],
+                "busca": busca.strip() if busca else None,
+            },
+        )
+        linhas = [dict(r) for r in cur.fetchall()]
+
+    saida = []
+    for r in linhas:
+        recorte = {"especie": r["slug"], "forma": None, "estagio": None}
+        if conf["card_forma"]:
+            recorte["forma"] = conf["card_forma"]
+        elif r["forma_regiao"]:
+            recorte["forma"] = r["forma_regiao"]
+        if conf["card_estagio"]:
+            recorte["estagio"] = conf["card_estagio"]
+        saida.append(
+            {
+                "valor": r["slug"],
+                "nome": r["nome"],
+                "dex": r["dex_number"],
+                "nome_ja": r["name_ja"],
+                "regiao": r["region"],
+                "regiao_nome": NOME_REGIAO.get(r["region"] or "", r["region"]),
+                "sprite": r["sprite_url"],
+                "slots": r["slots"],
+                "recorte": recorte,
+            }
+        )
+    return saida

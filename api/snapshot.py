@@ -36,6 +36,8 @@ class Recorte:
     regiao: str | None = None
     especie: str | None = None
     tipo: str | None = None
+    categoria: str | None = None
+    forma: str | None = None
 
 
 # Português primeiro, que é o ponto do projeto. Cada recorte existe para
@@ -49,6 +51,16 @@ RECORTES: tuple[Recorte, ...] = (
         "tem em português, às de agora.",
         idioma="pt",
         especie="charizard",
+    ),
+    Recorte(
+        chave="mega-charizard",
+        nome="Mega Charizard",
+        nota="A Pokédex de megas em ação: só as cartas de Mega Charizard em "
+        "português, X e Y juntas — as da era XY se chamam todas "
+        "'M Charizard EX' e só o número separa.",
+        idioma="pt",
+        especie="charizard",
+        forma="mega",
     ),
     Recorte(
         chave="151-kanto-arte",
@@ -94,6 +106,15 @@ RECORTES: tuple[Recorte, ...] = (
         colecao="base1",
     ),
     Recorte(
+        chave="151-treinador",
+        nome="151 · cartas de treinador",
+        nota="Masterset não é só Pokémon: os treinadores, itens e apoiadores "
+        "da coleção 151, que entram no fichário completo.",
+        idioma="pt",
+        colecao="sv03.5",
+        categoria="Trainer",
+    ),
+    Recorte(
         chave="151-en",
         nome="151 · em inglês",
         nota="A mesma coleção no catálogo inglês, para comparar com o "
@@ -124,7 +145,9 @@ def gerar(conn, recortes: tuple[Recorte, ...] = RECORTES) -> dict:
                 colecao=r.colecao,
                 regiao=r.regiao,
                 especie=r.especie,
-                tipo=[r.tipo] if r.tipo else None,
+                forma=r.forma,
+                categoria=r.categoria,
+                variante=[r.tipo] if r.tipo else None,
             ),
         )
         if not dados["slots"]:

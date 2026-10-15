@@ -151,7 +151,7 @@ class TCGdex:
         raise ultimo
 
     async def todas_cartas_detalhadas(self) -> list[dict]:
-        """Catálogo inglês inteiro com variants, em uma requisição.
+        """Catálogo inglês inteiro com variants e classificação, numa requisição.
 
         Substitui ~23.700 chamadas a /en/cards/{id}. Não existe equivalente
         para o japonês: o GraphQL não tem filtro de idioma.
@@ -161,6 +161,7 @@ class TCGdex:
             {
               cards {
                 id localId name rarity category dexId illustrator image
+                stage suffix types energyType trainerType regulationMark
                 variants { normal reverse holo firstEdition wPromo }
               }
             }

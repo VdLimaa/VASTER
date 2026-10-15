@@ -125,6 +125,7 @@ do slot, não do app: o mesmo colecionador mistura PT e EN no mesmo fichário.
 | `saude` | contagens do catálogo, uma por linha | — |
 | `ping` | espera o Postgres aceitar conexão (`--espera 90`) | — |
 | `snapshot` | grava os recortes prontos em `web/app/public/demo.json` | — |
+| `formas` | preenche `card.forma` (mega, de Alola…) a partir do nome | — |
 | `coverage` | relatório de cobertura PT por era | — |
 | `gate` | verifica o gate da F0 de uma espécie | — |
 | `masterset` | imprime o masterset de uma espécie | — |
@@ -347,28 +348,86 @@ componentes em `web/app/src/componentes/` não dependem do roteador.
 
 ### A tela
 
-Monta o fichário de **qualquer recorte**, combinando sete filtros:
+Começa pela pergunta que todo colecionador faz primeiro — **o que você quer
+colecionar?** — e são quatro portas:
+
+| Porta | Para quem quer |
+| --- | --- |
+| **Por Pokémon** | o masterset de um bicho, em todas as coleções e eras |
+| **Por coleção** | tudo o que compõe uma coleção |
+| **Por região** | os Pokémon de Kanto, de Johto… |
+| **Por tipo de carta** | treinador, item, apoiador, estádio, energia |
+
+### A Pokédex
+
+Quem escolhe por Pokémon ganha a **Pokédex inteira**: 1.025 espécies com
+sprite, separadas por região, com busca por nome em inglês, por nome japonês
+ou pelo número. E mais quatro dex de forma:
+
+| Dex | Quantas | O que é |
+| --- | ---: | --- |
+| Pokédex | 1.025 | a espécie, somando todas as formas |
+| Megas | 87 | as espécies que têm mega |
+| Formas regionais | 54 | de Alola, de Galar, de Hisui, de Paldea |
+| Gigantamax | 32 | — |
+| Primal | 2 | Kyogre e Groudon |
+
+Escolher na dex de megas monta o masterset **só das megas** daquele Pokémon:
+Mega Charizard em português são 16 slots, contra 135 do Charizard inteiro.
+
+**A API não tem esse dado.** O `dexId` de *M Charizard EX* é 6, o mesmo do
+Charizard comum, e o de *Exeggutor de Alola* é 103, o mesmo do de Kanto. Para
+o TCGdex são a mesma espécie — o que está certo para o masterset da espécie e
+errado para quem quer só as megas. Então a forma é **inferida do nome da
+carta**, em três idiomas, por regra escrita e medida em
+[`ingest/formas.py`](ingest/formas.py): 422 cartas de mega, 292 de Alola, 203
+de Galar, 153 de Hisui, 67 de Paldea, 6 Primal.
+
+Três coisas que a inferência carrega, e que ficam ditas:
+
+* **Mega Catcher é carta de treinador.** Começa com "Mega " e não é forma
+  nenhuma. A regra de mega só vale para Pokémon — sem esse corte, o item
+  entrava na Pokédex de megas.
+* **X e Y nem sempre dá para separar.** As megas da era XY se chamam todas
+  *M Charizard EX*, X e Y com o mesmo nome; só o número da carta distingue.
+  As da era Mega Evolution trazem *Mega Charizard X ex*. Por isso a forma é
+  uma só, `mega`.
+* **Gigantamax não tem nome em carta nenhuma.** No TCG, a carta de um Pokémon
+  Gigantamax é a VMAX dele. A dex de Gigantamax recorta por estágio `VMAX`,
+  não por nome, e isso está dito no código.
+
+### Os filtros
+
+Escolhida a porta, nove eixos se combinam em cima:
 
 | Filtro | Exemplo |
 | --- | --- |
 | Idioma | português (padrão), inglês, japonês |
-| **Pokémon** | busca por nome em inglês, por nome japonês ou pelo número: `charizard`, `リザードン`, `6` |
-| Região | Kanto, Johto, Hoenn… — é da **espécie**, não da coleção, então um Pikachu numa coleção de Paldea continua sendo de Kanto |
-| **Era** | Base, Neo, EX, Black & White, Scarlet & Violet… — e as japonesas, com os nomes delas |
-| **Ano** | de 1996 a hoje, pela data de lançamento da coleção |
-| **Raridade** | Comum, Incomum, Rara, Illustration rare, Ultra Rare, Secret Rare… |
-| Tipo | Normal, Reverse holo (RF), Holo, Arte especial / full art, Rainbow e gold, Shiny, Promo, 1ª edição |
-| Coleção | busca por nome ou id: `151`, `Céus em Evolução`, `sv03.5` |
+| Forma | Normal, Mega, de Alola, de Galar, de Hisui, de Paldea |
+| Tipo | Fogo, Água, Planta, Psíquico… — o tipo de energia, que é o que "tipo" quer dizer para quem joga |
+| Variante | Normal, Reverse holo (RF), Holo, Arte especial / full art, Rainbow e gold, Shiny, Promo, 1ª edição |
+| Era | Base, Neo, EX, Black & White, Scarlet & Violet… — e as japonesas, com os nomes delas |
+| Ano | de 1996 a hoje, pela data de lançamento da coleção |
+| Raridade | Comum, Incomum, Rara, Illustration rare, Ultra Rare, Secret Rare… |
+| Sufixo | ex, EX, GX, V, VMAX, VSTAR, TAG TEAM |
+| Estágio | Básico, Estágio 1, Estágio 2, VMAX, VSTAR, MEGA |
+| Categoria | Pokémon, Treinador, Energia — e o subtipo: Item, Apoiador, Estádio, Ferramenta |
 
-**Raridade não é tipo.** "Illustration Rare" é a raridade impressa na carta;
-"arte especial" é o tipo de slot. A mesma carta pode ser Ultra Rare *e* ter
-reverse holo — são dois eixos, e por isso dois filtros que se combinam.
+**Três palavras que não se confundem**, porque o produto inteiro depende
+disso:
+
+* **tipo** é fogo, água, planta — o que todo mundo chama de tipo;
+* **variante** é normal, reverse holo, full art — é o que gera slot, e é uma
+  compra;
+* **raridade** é o que está impresso na carta: Illustration Rare, Ultra Rare.
+
+A mesma carta pode ser Ultra Rare, do tipo Fogo, e ter versão reverse holo.
+São três eixos, e por isso três filtros que se combinam.
 
 Dois recortes para ver o que isso dá:
 
 * *Pokémon de Kanto da coleção 151, em full art, em português* — **21 slots**,
-  todos confirmados pelo catálogo: Bulbasaur 169/165, Ivysaur, Charmander,
-  Squirtle, Pikachu, Nidoking e as outras illustration rares.
+  todos confirmados pelo catálogo.
 * *todo Pikachu em português, de 1999 a 2005* — **38 slots**, e os 38 estão
   fora do catálogo, porque o TCGdex não tem carta em português antes de 2011.
   O fichário mostra o que falta provar, não só o que já está provado.
@@ -412,19 +471,23 @@ procura `alt_art`, procura *arte especial*. A tradução fica em
 | `GET /api/saude` | contagens do catálogo |
 | `GET /api/idiomas` | os três idiomas |
 | `GET /api/especies?busca=` | espécies por nome, nome japonês ou número da Pokédex |
-| `GET /api/facetas?<recorte>` | era, ano, raridade, tipo e região que existem no recorte, com contagem |
+| `GET /api/pokedex?dex=&regiao=` | a Pokédex com sprite e contagem: `especie`, `mega`, `regional`, `gigantamax`, `primal` |
+| `GET /api/facetas?<recorte>` | as **onze** listas de filtro que existem no recorte, com contagem |
 | `GET /api/colecoes?<recorte>&busca=` | coleções com slots no recorte |
 | `GET /api/binder?<recorte>` | os slots, com resumo de progresso |
 
 `<recorte>` é o mesmo conjunto de parâmetros nas três últimas:
-`idioma`, `colecao`, `regiao`, `especie`, `era`, `ano_de`, `ano_ate`,
-`raridade`, `tipo`. Em Python é uma dataclass só — `consultas.Recorte` — que
+`idioma`, `colecao`, `regiao`, `especie`, `forma`, `era`, `ano_de`,
+`ano_ate`, `raridade`, `variante`, `categoria`, `subtipo`, `tipo`, `sufixo`,
+`estagio`. Em Python é uma dataclass só — `consultas.Recorte` — que
 vira dependência do FastAPI. Filtro novo entra num lugar e as três rotas
 enxergam.
 
-`/api/binder` exige **coleção, região, espécie ou era**. Sem nenhum dos quatro
-seriam os 89 mil slots do catálogo, o que derruba a tela e não serve para
-ninguém.
+`/api/binder` exige um recorte que não seja o catálogo inteiro: coleção,
+região, espécie, era, forma, subtipo de treinador, ou categoria que não seja
+`Pokemon`. "Todos os Pokémon" são 29.620 slots em português — é o catálogo,
+não um masterset. "Todos os treinadores" são 4.734, e esse é um masterset de
+verdade.
 
 ## Ver sem instalar nada
 
@@ -435,13 +498,15 @@ cd web/app && npm install && npm run dev
 ```
 
 Quando a API não responde, a tela cai no `web/app/public/demo.json` e entra em
-**modo demonstração**: no lugar dos filtros, oito recortes já calculados, com
+**modo demonstração**: no lugar dos filtros, dez recortes já calculados, com
 um aviso dizendo que é isso que está no ar. Fichário, grade, marcas e
 impressão funcionam igual — o que muda é só de onde vem o dado.
 
 | Recorte | Mostra |
 | --- | --- |
 | Charizard · masterset | a premissa do projeto: 135 slots em 53 coleções |
+| Mega Charizard | a Pokédex de megas em ação: 16 slots |
+| 151 · cartas de treinador | masterset não é só Pokémon |
 | 151 · Kanto · arte especial | o recorte que motivou o projeto: 21 slots |
 | 151 · masterset inteiro | 362 slots, a coleção toda em português |
 | Escuridão Absoluta | coleção recente, 100% catalogada e com scan |
@@ -458,7 +523,7 @@ para quem baixou o `.zip` e para hospedagem estática — a Vercel não tem
 Postgres. Regerar depois de mexer no catálogo:
 
 ```bash
-python -m ingest snapshot            # ~1,1 MB em web/app/public/demo.json
+python -m ingest snapshot            # ~1,4 MB em web/app/public/demo.json
 ```
 
 Os recortes moram em `api/snapshot.py` e o payload de cada um sai da **mesma
@@ -486,11 +551,11 @@ dois.
 ## Desenvolvimento
 
 ```bash
-pytest          # 95 testes, sem rede e sem banco
+pytest          # 119 testes, sem rede e sem banco
 ruff check .
 
 VASTER_TEST_DSN=postgresql://vaster:vaster@localhost:5432/vaster pytest
-#               106 testes: os 11 que faltam conferem o SQL contra o Postgres
+#               131 testes: os 11 que faltam conferem o SQL contra o Postgres
 
 cd web/app && npx tsc -b && npx oxlint
 ```
