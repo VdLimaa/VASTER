@@ -25,7 +25,9 @@ from ingest.species import NOME_REGIAO
 from . import consultas
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
-WEB = RAIZ / "web" / "binder"
+# O React compilado. Em desenvolvimento o Vite serve a tela em :5173 e
+# repassa /api para cá; em produção o FastAPI serve o dist e sobe um processo só.
+WEB = RAIZ / "web" / "app" / "dist"
 
 app = FastAPI(
     title="Masterset BR",
@@ -172,9 +174,19 @@ def rota_binder(
     }
 
 
-if WEB.exists():
-    app.mount("/estatico", StaticFiles(directory=str(WEB)), name="estatico")
+if (WEB / "index.html").exists():
+    app.mount("/assets", StaticFiles(directory=str(WEB / "assets")), name="assets")
 
     @app.get("/")
     def pagina() -> FileResponse:
         return FileResponse(WEB / "index.html")
+
+else:
+
+    @app.get("/")
+    def sem_build() -> dict:
+        return {
+            "erro": "A tela ainda não foi compilada.",
+            "faca": "cd web/app && npm install && npm run build",
+            "ou": "cd web/app && npm run dev  (Vite em :5173, com proxy para esta API)",
+        }

@@ -245,6 +245,8 @@ o TCGdex não tem uma única carta em português antes de 2011.
 
 ## Rodar em localhost
 
+Uma vez, para encher o banco:
+
 ```bash
 docker compose up -d db
 cp .env.example .env
@@ -255,12 +257,38 @@ python -m ingest migrate
 python -m ingest species && python -m ingest sets && python -m ingest cards
 python -m ingest details --all --bulk
 python -m ingest links --all && python -m ingest slots --all
+```
 
+Leva ~7 minutos. Depois, `python -m ingest update` pega só o que entrou de novo.
+
+Para subir a aplicação, **um processo**:
+
+```bash
+cd web/app && npm install && npm run build && cd ../..
 uvicorn api.main:app --reload
 ```
 
-Abre em http://127.0.0.1:8000. A ingestão completa leva ~7 minutos e só precisa
-rodar uma vez; depois, `python -m ingest update` pega o que entrou de novo.
+Abre em http://127.0.0.1:8000 — o FastAPI serve a API e a tela compilada.
+
+Para mexer no frontend, **dois processos** com recarga instantânea:
+
+```bash
+uvicorn api.main:app --reload          # terminal 1 — API em :8000
+cd web/app && npm run dev              # terminal 2 — tela em :5173
+```
+
+O Vite repassa `/api` para o FastAPI, então basta abrir
+http://127.0.0.1:5173.
+
+### Stack do frontend
+
+React 19 + TypeScript + Vite, sem framework de UI e sem dependência além do
+React — o CSS é próprio, com os mesmos tokens do resto do projeto.
+
+O documento de arquitetura escolhe Next.js, por causa do SSR para a F5 (página
+pública por espécie, SEO). Isto aqui é Vite porque a F5 está longe e um
+processo a menos vale mais agora. Quando a F5 chegar, a migração é direta: os
+componentes em `web/app/src/componentes/` não dependem do roteador.
 
 ### A tela
 
@@ -280,6 +308,20 @@ illustration rares.
 
 Cada slot tem **Tenho / Quero / Falta**, salvos no navegador — sem login, como
 no fichário de verdade. "Tenho" mostra a carta colorida, "Falta" em cinza.
+
+O fichário abre em **folha dupla**, como o de verdade: a capa sozinha na
+primeira abertura, e daí em diante as páginas aos pares. A grade vai de
+**2x2 a 5x4**, e o botão **Imprimir o fichário** troca a visão para todas as
+páginas em sequência, uma por folha A4, sem os controles.
+
+A impressão precisa de um cuidado que não é óbvio: `window.print()` é síncrono,
+então trocar o estado dentro de `beforeprint` não dá tempo do React repintar — o
+diálogo capturaria só a abertura visível. O caminho é marcar o estado, deixar
+pintar, e só então abrir o diálogo. Conferido: na tela são capa + 1 página; no
+instante da impressão são as 3 páginas com os 21 slots, sem a capa.
+
+Esse mesmo HTML é o que o WeasyPrint vai consumir no PDF da F2 — a folha de
+estilo de impressão já existe.
 
 Os rótulos de tipo são os que o colecionador usa, não os do enum: ninguém
 procura `alt_art`, procura *arte especial*. A tradução fica em
