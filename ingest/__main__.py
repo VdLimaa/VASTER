@@ -8,6 +8,7 @@
     python -m ingest links   --species sableye
     python -m ingest slots   --species sableye
     python -m ingest gate    --species sableye
+    python -m ingest snapshot
 
 O scheduler da F2 chama exatamente estes comandos. Enquanto a F0 estiver
 sendo validada, rode na mão.
@@ -50,6 +51,28 @@ def main(argv: list[str] | None = None) -> int:
         "scheduler: roda semanal e acompanha coleção nova",
     )
     sub.add_parser("refresh", help="recalcula a materialized view de preço")
+    sub.add_parser("saude", help="contagens do catálogo, uma por linha")
+    pg = sub.add_parser(
+        "ping",
+        help="espera o Postgres aceitar conexão. Sai 0 quando responde, 1 "
+        "quando desiste — é o que o script de instalação usa",
+    )
+    pg.add_argument(
+        "--espera",
+        type=int,
+        default=0,
+        help="segundos de espera antes de desistir (padrão 0: tenta uma vez)",
+    )
+    sn = sub.add_parser(
+        "snapshot",
+        help="grava os recortes prontos em web/app/public/demo.json, para a "
+        "tela abrir sem backend",
+    )
+    sn.add_argument(
+        "--saida",
+        default="web/app/public/demo.json",
+        help="arquivo de saída (padrão web/app/public/demo.json)",
+    )
     sub.add_parser("coverage", help="relatório de cobertura PT por era")
 
     d = sub.add_parser("details", help="busca variants/rarity/dexId por carta")
@@ -109,6 +132,9 @@ def main(argv: list[str] | None = None) -> int:
 
     args = p.parse_args(argv)
     cfg = Config.from_env()
+
+    if args.cmd == "ping":
+        return _ping(cfg.dsn, args.espera)
 
     with connect(cfg.dsn) as conn:
         if args.cmd == "migrate":
@@ -205,6 +231,23 @@ def main(argv: list[str] | None = None) -> int:
             _coverage(conn)
             return 0
 
+        if args.cmd == "saude":
+            from api.consultas import saude
+
+            for chave, valor in saude(conn).items():
+                print(f"{chave} {valor}")
+            return 0
+
+        if args.cmd == "snapshot":
+            import pathlib
+
+            from api.snapshot import gravar
+
+            destino = pathlib.Path(args.saida)
+            quantos, tamanho = gravar(conn, destino)
+            print(f"snapshot: {quantos} recortes, {tamanho / 1024:.0f} KB em {destino}")
+            return 0
+
         if args.cmd == "masterset":
             _masterset(conn, args)
             return 0
@@ -217,6 +260,29 @@ def main(argv: list[str] | None = None) -> int:
             return _gate(conn, args.species)
 
     return 0
+
+
+def _ping(dsn: str, espera: int) -> int:
+    """Espera o banco aceitar conexão.
+
+    O `docker compose up -d db` volta na hora, mas o Postgres ainda está
+    subindo. A espera mora aqui, e não no script de instalação, para não ter
+    um laço de retentativa escrito em bash e outro em PowerShell.
+    """
+    import time
+
+    import psycopg
+
+    limite = time.monotonic() + max(espera, 0)
+    while True:
+        try:
+            psycopg.connect(dsn, connect_timeout=3).close()
+            return 0
+        except psycopg.OperationalError as e:
+            if time.monotonic() >= limite:
+                print(f"ping: o banco não respondeu em {espera}s\n  {e}", file=sys.stderr)
+                return 1
+            time.sleep(1)
 
 
 def _regiao(sp: argparse.ArgumentParser) -> None:

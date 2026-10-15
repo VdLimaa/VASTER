@@ -9,21 +9,25 @@ O que a API do TCGdex realmente entrega, medido:
 ingestão.
 
 **Estado: F0 fechada, catálogo completo.** 404 coleções, 36.517 cartas,
-**as 1.025 espécies com masterset nos três idiomas**, 80.464 slots. Do banco
+**as 1.025 espécies com masterset nos três idiomas**, 89.292 slots. Do banco
 vazio ao catálogo inteiro em cerca de 7 minutos. A F1 (admin de curadoria) é o
 próximo passo.
 
 ## Subir
 
-```bash
-docker compose up -d db
-cp .env.example .env
-
-uv venv && source .venv/bin/activate
-uv pip install -e '.[dev]'
-
-python -m ingest migrate
+```powershell
+scripts\subir.bat                    # Windows
 ```
+
+```bash
+scripts/subir.sh                     # Linux e macOS
+```
+
+Confere Python e Node, sobe o Postgres, instala, enche o catálogo, compila a
+tela e abre a aplicação em http://127.0.0.1:8000. Passo a passo, atalhos e o
+caminho na mão: [Rodar em localhost](#rodar-em-localhost). Para só *ver* a
+tela, sem instalar banco nenhum:
+[Ver sem instalar nada](#ver-sem-instalar-nada).
 
 ## Montar o catálogo inteiro
 
@@ -33,7 +37,7 @@ python -m ingest sets                # 404 coleções (220 oeste + 184 Japão)
 python -m ingest cards               # 36.517 cartas em 3 requisições
 python -m ingest details --all --bulk   # variants de tudo (~6 min)
 python -m ingest links --all            # 30.672 vínculos carta↔espécie
-python -m ingest slots --all            # 80.464 slots
+python -m ingest slots --all            # 89.292 slots
 ```
 
 `details --all --bulk` é o passo que torna isso viável. O catálogo ocidental
@@ -118,6 +122,9 @@ do slot, não do app: o mesmo colecionador mistura PT e EN no mesmo fichário.
 | `slots` | gera `card_variant` aplicando a política por era | — |
 | `update` | só o delta desde a última execução | ~50 s |
 | `refresh` | recalcula a materialized view `price_current` | — |
+| `saude` | contagens do catálogo, uma por linha | — |
+| `ping` | espera o Postgres aceitar conexão (`--espera 90`) | — |
+| `snapshot` | grava os recortes prontos em `web/app/public/demo.json` | — |
 | `coverage` | relatório de cobertura PT por era | — |
 | `gate` | verifica o gate da F0 de uma espécie | — |
 | `masterset` | imprime o masterset de uma espécie | — |
@@ -245,19 +252,63 @@ o TCGdex não tem uma única carta em português antes de 2011.
 
 ## Rodar em localhost
 
-Uma vez, para encher o banco:
+Um comando faz tudo — confere Python e Node, sobe o Postgres, instala, enche o
+catálogo, compila a tela e sobe a aplicação:
+
+```powershell
+scripts\subir.bat                    # Windows
+```
+
+```bash
+scripts/subir.sh                     # Linux e macOS
+```
+
+Os dois aceitam os mesmos atalhos:
+
+| Atalho | Para quê |
+| --- | --- |
+| `-Rapido` / `--rapido` | só o catálogo ocidental (inglês e português), ~1 min no lugar de ~7 |
+| `-Dev` / `--dev` | dois processos, com recarga instantânea do frontend |
+| `-SoTela` / `--so-tela` | pula a ingestão, para quando o banco já está cheio |
+| `-Porta 9000` / `--porta 9000` | troca a porta da API |
+
+O script é idempotente: rodar de novo com o banco cheio chama
+`python -m ingest update`, que pega só o que entrou desde a última vez.
+
+**No Windows**, `scripts\subir.bat` existe porque arquivo que saiu de um `.zip`
+baixado vem marcado pelo Windows e o PowerShell recusa rodar. O `.bat` chama o
+`.ps1` com `-ExecutionPolicy Bypass`, que resolve as duas coisas. Dá no mesmo
+chamar direto:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\subir.ps1 -Rapido
+```
+
+Precisa de **Python 3.12+**, **Node.js** e um **Postgres 16**. Se faltar, o
+script diz qual e com que comando instalar. O Postgres sai do
+`docker compose up -d db`; para usar um que você já tenha, aponte a variável e
+o script respeita:
+
+```powershell
+$env:VASTER_DB_DSN = "postgresql://usuario:senha@localhost:5432/vaster"
+```
+
+### Na mão
 
 ```bash
 docker compose up -d db
-cp .env.example .env
-uv venv && source .venv/bin/activate
-uv pip install -e '.[dev,api]'
+cp .env.example .env                 # opcional: os padrões já batem com o compose
+python -m venv .venv && source .venv/bin/activate
+pip install -e '.[dev,api]'
 
 python -m ingest migrate
 python -m ingest species && python -m ingest sets && python -m ingest cards
 python -m ingest details --all --bulk
 python -m ingest links --all && python -m ingest slots --all
 ```
+
+No Windows as três linhas que mudam são `.venv\Scripts\activate`,
+`copy .env.example .env` e `py -m venv .venv`.
 
 Leva ~7 minutos. Depois, `python -m ingest update` pega só o que entrou de novo.
 
@@ -279,6 +330,10 @@ cd web/app && npm run dev              # terminal 2 — tela em :5173
 
 O Vite repassa `/api` para o FastAPI, então basta abrir
 http://127.0.0.1:5173.
+
+**O `package.json` fica em `web/app`, não na raiz.** `npm run dev` na raiz
+responde `ENOENT: no such file or directory, open .../package.json` — é o
+diretório, não a instalação.
 
 ### Stack do frontend
 
@@ -341,6 +396,43 @@ procura `alt_art`, procura *arte especial*. A tradução fica em
 `/api/binder` exige pelo menos um recorte — sem filtro seriam os 89 mil slots
 do catálogo, o que derruba a tela e não serve para ninguém.
 
+## Ver sem instalar nada
+
+A tela abre sozinha, sem Postgres, sem Python e sem ingestão:
+
+```bash
+cd web/app && npm install && npm run dev
+```
+
+Quando a API não responde, a tela cai no `web/app/public/demo.json` e entra em
+**modo demonstração**: no lugar dos filtros, sete recortes já calculados, com
+um aviso dizendo que é isso que está no ar. Fichário, grade, marcas e
+impressão funcionam igual — o que muda é só de onde vem o dado.
+
+| Recorte | Mostra |
+| --- | --- |
+| 151 · Kanto · arte especial | o recorte que motivou o projeto: 21 slots |
+| 151 · masterset inteiro | 362 slots, a coleção toda em português |
+| Escuridão Absoluta | coleção recente, 100% catalogada e com scan |
+| 30 Anos · Coleção Clássica | as 30 estão no catálogo e **nenhuma tem foto** |
+| Base Set (1999) | **todo slot fora do catálogo** — é o que a curadoria resolve |
+| 151 · em inglês | a mesma coleção no catálogo inglês |
+| 151 · em japonês | `SV2a`, que é outra coleção, não uma tradução |
+
+O console mostra um `502` em `/api/saude` — é a tela perguntando se a API está
+no ar antes de cair no arquivo. Em modo demonstração é esperado.
+
+O arquivo sai de `python -m ingest snapshot` e está versionado, então vale
+para quem baixou o `.zip` e para hospedagem estática — a Vercel não tem
+Postgres. Regerar depois de mexer no catálogo:
+
+```bash
+python -m ingest snapshot            # ~1 MB em web/app/public/demo.json
+```
+
+Os recortes moram em `api/snapshot.py` e o payload de cada um sai da **mesma
+função** que a rota `/api/binder` usa, então os dois não têm como divergir.
+
 ## Protótipo da tela
 
 `web/prototipo/` é um HTML solto, sem build, para validar a interação antes de
@@ -363,8 +455,13 @@ dois.
 ## Desenvolvimento
 
 ```bash
-pytest          # 88 testes, sem rede
+pytest          # 95 testes, sem rede e sem banco
 ruff check .
+
+VASTER_TEST_DSN=postgresql://vaster:vaster@localhost:5432/vaster pytest
+#               104 testes: os 9 que faltam conferem o SQL contra o Postgres
+
+cd web/app && npx tsc -b && npx oxlint
 ```
 
 Os testes usam fixtures capturadas da API real, em `tests/fixtures/`, não

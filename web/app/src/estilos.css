@@ -141,10 +141,26 @@ input[type="search"]:focus-visible { outline: 2px solid var(--accent); outline-o
 .paginacao button:disabled { opacity: .4; cursor: default; }
 .paginacao span { font-family: var(--data); font-size: 12px; color: var(--fg-mute); }
 
+/* --- modo demonstração ---
+   Sem backend a tela ainda é a tela; o aviso é o que impede alguém de achar
+   que o catálogo inteiro são sete recortes. */
+.aviso { display: flex; flex-direction: column; gap: 4px; padding: 11px 13px;
+         border-radius: 8px; background: var(--wait-soft);
+         border: 1px solid color-mix(in srgb, var(--wait) 35%, var(--line));
+         font-size: 13px; color: var(--fg-dim); }
+.aviso strong { font-family: var(--display); font-size: 14px; color: var(--fg); }
+.aviso code { font-family: var(--data); font-size: 11.5px;
+              background: color-mix(in srgb, var(--wait) 12%, transparent);
+              padding: 1px 5px; border-radius: 4px; }
+.nota-recorte { margin: 0; font-size: 13px; color: var(--fg-mute);
+                border-top: 1px dashed var(--line); padding-top: 10px; }
+
 .vaziao { text-align: center; padding: 52px 20px; color: var(--fg-dim);
           border: 1px dashed var(--line); border-radius: var(--radius); }
 .vaziao strong { display: block; font-family: var(--display); font-size: 18px;
                  color: var(--fg); margin-bottom: 6px; }
+.vaziao code { font-family: var(--data); font-size: 12px; background: var(--surface-2);
+               padding: 1px 5px; border-radius: 4px; }
 .rodape { margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--line);
           color: var(--fg-mute); font-size: 12.5px; }
 .rodape code { font-family: var(--data); font-size: 11.5px; background: var(--surface-2);

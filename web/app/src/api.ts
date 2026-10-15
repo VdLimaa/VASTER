@@ -77,6 +77,21 @@ export interface Saude {
   especies: number;
 }
 
+/** Um recorte já calculado, gravado por `python -m ingest snapshot`. */
+export interface RecortePronto extends Binder {
+  chave: string;
+  nome: string;
+  nota: string;
+}
+
+/** O snapshot estático: é o que a tela usa quando não há backend no ar. */
+export interface Demo {
+  gerado_em: string;
+  saude: Omit<Saude, "ok">;
+  idiomas: Opcao[];
+  recortes: RecortePronto[];
+}
+
 async function pegar<T>(rota: string): Promise<T> {
   const r = await fetch(rota);
   if (!r.ok) {
@@ -103,6 +118,9 @@ export const api = {
     if (p.busca) q.set("busca", p.busca);
     return pegar<Colecao[]>("/api/colecoes?" + q);
   },
+  // Lido do arquivo estático, não da API: é o caminho sem backend. BASE_URL
+  // para a tela funcionar também servida de um subdiretório.
+  demo: () => pegar<Demo>(`${import.meta.env.BASE_URL}demo.json`),
   binder: (p: {
     idioma: Idioma;
     colecao?: string | null;

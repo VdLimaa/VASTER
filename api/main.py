@@ -20,7 +20,6 @@ from fastapi.staticfiles import StaticFiles
 
 from ingest.config import Config
 from ingest.db import connect, query
-from ingest.species import NOME_REGIAO
 
 from . import consultas
 
@@ -46,17 +45,8 @@ Conn = Annotated[object, Depends(banco)]
 
 
 @app.get("/api/saude")
-def saude(conn: Conn) -> dict:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            select (select count(*) from card_set)     as colecoes,
-                   (select count(*) from card)         as cartas,
-                   (select count(*) from card_variant) as slots,
-                   (select count(*) from species where region is not null) as especies
-            """
-        )
-        return {"ok": True, **dict(cur.fetchone())}
+def rota_saude(conn: Conn) -> dict:
+    return {"ok": True, **consultas.saude(conn)}
 
 
 @app.get("/api/regioes")
@@ -123,55 +113,22 @@ def rota_binder(
     Sem nenhum filtro isto devolveria os 89 mil slots do catálogo, o que não
     serve para ninguém e derruba a tela. Pelo menos um recorte é obrigatório.
     """
-    idioma = idioma or ["pt"]
     if not any((colecao, regiao, especie)):
         raise HTTPException(
             status_code=400,
             detail="Escolha pelo menos uma coleção, região ou espécie.",
         )
-
-    with conn.cursor() as cur:
-        cur.execute(
-            query("binder"),
-            {
-                "user_id": usuario,
-                "set_id": colecao,
-                "region": regiao,
-                "species": especie,
-                "kinds": consultas.kinds_do_grupo(tipo),
-                "languages": idioma or None,
-                "status": None,
-                "include_absent": incluir_absent,
-                "include_digital": incluir_digital,
-            },
-        )
-        slots = [dict(r) for r in cur.fetchall()]
-
-    tenho = sum(1 for s in slots if s["status"] == "owned")
-    quero = sum(1 for s in slots if s["status"] == "wanted")
-    return {
-        "recorte": {
-            "colecao": colecao,
-            "regiao": regiao,
-            "regiao_nome": NOME_REGIAO.get(regiao or "", regiao),
-            "especie": especie,
-            "tipo": tipo,
-            "idioma": idioma,
-        },
-        "resumo": {
-            "slots": len(slots),
-            "cartas": len({s["card_id"] for s in slots}),
-            "colecoes": len({s["set_id"] for s in slots}),
-            "tenho": tenho,
-            "quero": quero,
-            "falta": len(slots) - tenho,
-            "confirmados": sum(1 for s in slots if s["exists_state"] == "confirmed"),
-            "inferidos": sum(1 for s in slots if s["created_by"] == "inferred"),
-            "sem_foto": sum(1 for s in slots if s["no_catalogo"] and not s["has_scan"]),
-            "fora_do_catalogo": sum(1 for s in slots if not s["no_catalogo"]),
-        },
-        "slots": slots,
-    }
+    return consultas.binder(
+        conn,
+        set_id=colecao,
+        region=regiao,
+        species=especie,
+        tipo=tipo,
+        idiomas=idioma,
+        user_id=usuario,
+        incluir_absent=incluir_absent,
+        incluir_digital=incluir_digital,
+    )
 
 
 if (WEB / "index.html").exists():

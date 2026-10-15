@@ -7,6 +7,7 @@ sendo a verdade no banco; isto é a tradução para a tela.
 
 from __future__ import annotations
 
+from ingest.db import query
 from ingest.species import NOME_REGIAO
 
 # Agrupa os tipos de slot como o colecionador pensa. A chave é o que vai na
@@ -95,3 +96,81 @@ def tipos(conn, *, set_id: str | None = None) -> list[dict]:
         if n:
             saida.append({"valor": chave, "nome": rotulo, "slots": n})
     return saida
+
+
+def saude(conn) -> dict:
+    """As contagens do catálogo. A tela mostra no subtítulo e o script de
+    instalação usa para saber se precisa ingerir ou só atualizar."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            select (select count(*) from card_set)     as colecoes,
+                   (select count(*) from card)         as cartas,
+                   (select count(*) from card_variant) as slots,
+                   (select count(*) from species where region is not null) as especies
+            """
+        )
+        return dict(cur.fetchone())
+
+
+def binder(
+    conn,
+    *,
+    set_id: str | None = None,
+    region: str | None = None,
+    species: str | None = None,
+    tipo: list[str] | None = None,
+    idiomas: list[str] | None = None,
+    user_id: int | None = None,
+    incluir_absent: bool = False,
+    incluir_digital: bool = False,
+) -> dict:
+    """O recorte do masterset, com o resumo de progresso junto.
+
+    Está aqui, e não na rota, porque o snapshot estático (`api/snapshot.py`)
+    precisa gravar exatamente o mesmo payload que a rota devolve. Dois
+    cálculos de resumo seriam duas verdades.
+    """
+    idiomas = idiomas or ["pt"]
+    with conn.cursor() as cur:
+        cur.execute(
+            query("binder"),
+            {
+                "user_id": user_id,
+                "set_id": set_id,
+                "region": region,
+                "species": species,
+                "kinds": kinds_do_grupo(tipo),
+                "languages": idiomas or None,
+                "status": None,
+                "include_absent": incluir_absent,
+                "include_digital": incluir_digital,
+            },
+        )
+        slots = [dict(r) for r in cur.fetchall()]
+
+    tenho = sum(1 for s in slots if s["status"] == "owned")
+    quero = sum(1 for s in slots if s["status"] == "wanted")
+    return {
+        "recorte": {
+            "colecao": set_id,
+            "regiao": region,
+            "regiao_nome": NOME_REGIAO.get(region or "", region),
+            "especie": species,
+            "tipo": tipo,
+            "idioma": idiomas,
+        },
+        "resumo": {
+            "slots": len(slots),
+            "cartas": len({s["card_id"] for s in slots}),
+            "colecoes": len({s["set_id"] for s in slots}),
+            "tenho": tenho,
+            "quero": quero,
+            "falta": len(slots) - tenho,
+            "confirmados": sum(1 for s in slots if s["exists_state"] == "confirmed"),
+            "inferidos": sum(1 for s in slots if s["created_by"] == "inferred"),
+            "sem_foto": sum(1 for s in slots if s["no_catalogo"] and not s["has_scan"]),
+            "fora_do_catalogo": sum(1 for s in slots if not s["no_catalogo"]),
+        },
+        "slots": slots,
+    }
